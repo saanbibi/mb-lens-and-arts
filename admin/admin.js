@@ -1,383 +1,536 @@
-// Get DOM elements
-const drop = document.getElementById('drop');
-const fileInput = document.getElementById('file');
-const titleInput = document.getElementById('title');
-const categorySelect = document.getElementById('category');
-const captionTextarea = document.getElementById('caption');
-const tagsInput = document.getElementById('tags');
-const scheduleInput = document.getElementById('schedule');
-const saveBtn = document.getElementById('saveBtn');
-const resetBtn = document.getElementById('resetBtn');
-const deleteBtn = document.getElementById('deleteBtn');
-const statusDiv = document.getElementById('status');
-const postsContainer = document.getElementById('posts');
-const pillFeatured = document.getElementById('pillFeatured');
-const pillDraft = document.getElementById('pillDraft');
+/* MB Lens & Arts — Admin (static/local)
+   NOTE: This is client-side only. It's good for "hidden" editing,
+   but it's not real security.
+*/
 
-let currentImageData = null;
-let editingPostId = null;
+const STORAGE_KEY = "mb_posts";
+const SECRET_PARAM = "mbcms";
+const SESSION_KEY = "mb_admin_session";
 
-// ============ IMAGE UPLOAD / DROP ZONE ============
+// Fixed password (your request)
+const ADMIN_PASSWORD = "mb10201944";
 
-// Click to upload
-drop.addEventListener('click', () => {
-  fileInput.click();
-});
+// Elements
+const gateEl = document.getElementById("gate");
+const loginEl = document.getElementById("login");
+const appEl = document.getElementById("app");
 
-// Allow keyboard access
-drop.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    fileInput.click();
+const pwEl = document.getElementById("pw");
+const loginBtn = document.getElementById("loginBtn");
+const loginHint = document.getElementById("loginHint");
+const logoutBtn = document.getElementById("logoutBtn");
+
+const themeToggle = document.getElementById("themeToggle");
+
+const dropEl = document.getElementById("drop");
+const fileEl = document.getElementById("file");
+
+const editorTitle = document.getElementById("editorTitle");
+const editId = document.getElementById("editId");
+const titleEl = document.getElementById("title");
+const captionEl = document.getElementById("caption");
+const categoryEl = document.getElementById("category");
+const scheduleEl = document.getElementById("schedule");
+const tagsEl = document.getElementById("tags");
+
+const pillFeatured = document.getElementById("pillFeatured");
+const pillDraft = document.getElementById("pillDraft");
+
+const saveBtn = document.getElementById("saveBtn");
+const resetBtn = document.getElementById("resetBtn");
+const deleteBtn = document.getElementById("deleteBtn");
+const statusEl = document.getElementById("status");
+
+const postsEl = document.getElementById("posts");
+const exportBtn = document.getElementById("exportBtn");
+const wipeBtn = document.getElementById("wipeBtn");
+
+// Analytics
+const countTotal = document.getElementById("countTotal");
+const countPhoto = document.getElementById("countPhoto");
+const countArt = document.getElementById("countArt");
+const countFeatured = document.getElementById("countFeatured");
+const countDraft = document.getElementById("countDraft");
+const countScheduled = document.getElementById("countScheduled");
+
+// State
+let posts = [];
+let editingId = null;
+let currentImage = "";
+let featured = false;
+let draft = false;
+
+/* ---------------- Theme ---------------- */
+function setTheme(isDark) {
+  document.body.classList.toggle("dark", isDark);
+  localStorage.setItem("mb_theme", isDark ? "dark" : "light");
+  if (themeToggle) themeToggle.textContent = isDark ? "Light" : "Dark";
+}
+
+/* ---------------- Access gate ---------------- */
+function hasSecretParam() {
+  try {
+    const u = new URL(window.location.href);
+    return u.searchParams.has(SECRET_PARAM);
+  } catch {
+    return false;
   }
-});
+}
 
-// Drag and drop
-drop.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  drop.classList.add('drag');
-});
+function showGate() {
+  if (gateEl) gateEl.style.display = "block";
+  if (loginEl) loginEl.style.display = "none";
+  if (appEl) appEl.style.display = "none";
+}
 
-drop.addEventListener('dragleave', () => {
-  drop.classList.remove('drag');
-});
+function showLogin() {
+  if (gateEl) gateEl.style.display = "none";
+  if (loginEl) loginEl.style.display = "block";
+  if (appEl) appEl.style.display = "none";
+  if (pwEl) pwEl.focus();
+}
 
-drop.addEventListener('drop', (e) => {
-  e.preventDefault();
-  drop.classList.remove('drag');
-  
-  const files = e.dataTransfer.files;
-  if (files.length > 0) {
-    handleImageFile(files[0]);
+function showApp() {
+  if (gateEl) gateEl.style.display = "none";
+  if (loginEl) loginEl.style.display = "none";
+  if (appEl) appEl.style.display = "block";
+}
+
+function isLoggedIn() {
+  return sessionStorage.getItem(SESSION_KEY) === "1";
+}
+
+function login() {
+  const entered = String(pwEl?.value || "");
+  if (entered === ADMIN_PASSWORD) {
+    sessionStorage.setItem(SESSION_KEY, "1");
+    if (loginHint) loginHint.textContent = "";
+    showApp();
+    initApp();
+  } else {
+    if (loginHint) loginHint.textContent = "Wrong password.";
   }
-});
+}
 
-// File input change
-fileInput.addEventListener('change', (e) => {
-  if (e.target.files.length > 0) {
-    handleImageFile(e.target.files[0]);
-  }
-});
+function logout() {
+  sessionStorage.removeItem(SESSION_KEY);
+  showLogin();
+}
 
-function handleImageFile(file) {
-  if (!file.type.startsWith('image/')) {
-    statusDiv.textContent = '❌ Please select an image file';
+function checkAccessAndBoot() {
+  if (!hasSecretParam()) {
+    showGate();
     return;
   }
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    currentImageData = e.target.result;
-    
-    // Display the image in the drop zone
-    drop.innerHTML = `<img src="${currentImageData}" alt="Selected image"/>`;
-    drop.style.backgroundImage = 'none';
-    
-    statusDiv.textContent = '✓ Image loaded';
-  };
-  reader.readAsDataURL(file);
+  // If already logged in, go straight to app
+  if (isLoggedIn()) {
+    showApp();
+    initApp();
+  } else {
+    showLogin();
+  }
 }
 
-// ============ POST MANAGEMENT ============
+/* ---------------- Storage ---------------- */
+function loadPosts() {
+  try {
+    posts = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    if (!Array.isArray(posts)) posts = [];
+  } catch {
+    posts = [];
+  }
+}
 
-saveBtn.addEventListener('click', savePost);
-resetBtn.addEventListener('click', resetForm);
-deleteBtn.addEventListener('click', deletePost);
+function savePosts() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+}
+
+/* ---------------- Helpers ---------------- */
+function nowISO() {
+  return new Date().toISOString();
+}
+
+function makeId() {
+  return "p_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+}
+
+function normalizeTags(str) {
+  const raw = String(str || "").trim();
+  if (!raw) return [];
+  return raw
+    .split(/\s+/)
+    .map(t => t.trim())
+    .filter(Boolean)
+    .map(t => (t.startsWith("#") ? t : `#${t}`));
+}
+
+function setStatus(msg) {
+  if (!statusEl) return;
+  statusEl.textContent = msg;
+  if (!msg) return;
+  setTimeout(() => {
+    if (statusEl.textContent === msg) statusEl.textContent = "";
+  }, 1800);
+}
+
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+/* ---------------- UI state ---------------- */
+function resetEditor() {
+  editingId = null;
+  currentImage = "";
+  featured = false;
+  draft = false;
+
+  if (editorTitle) editorTitle.textContent = "Create post";
+  if (editId) editId.textContent = "";
+
+  if (titleEl) titleEl.value = "";
+  if (captionEl) captionEl.value = "";
+  if (tagsEl) tagsEl.value = "";
+  if (scheduleEl) scheduleEl.value = "";
+  if (categoryEl) categoryEl.value = "Photography";
+
+  pillFeatured?.classList.remove("on");
+  pillDraft?.classList.remove("on");
+
+  if (deleteBtn) deleteBtn.style.display = "none";
+
+  if (dropEl) {
+    dropEl.innerHTML = `<b>Drop image</b> or click to upload<small>JPG/PNG/WebP recommended</small>`;
+  }
+}
+
+function fillEditor(post) {
+  editingId = post.id;
+  currentImage = post.image || "";
+  featured = !!post.featured;
+  draft = !!post.draft;
+
+  if (editorTitle) editorTitle.textContent = "Edit post";
+  if (editId) editId.textContent = `ID: ${post.id}`;
+
+  if (titleEl) titleEl.value = post.title || "";
+  if (captionEl) captionEl.value = post.caption || "";
+  if (tagsEl) tagsEl.value = (post.tags || []).join(" ");
+  if (categoryEl) categoryEl.value = post.category || "Photography";
+
+  if (scheduleEl) {
+    // Try to convert ISO to datetime-local
+    if (post.schedule) {
+      const d = new Date(post.schedule);
+      if (!Number.isNaN(d.getTime())) {
+        const pad = n => String(n).padStart(2, "0");
+        const local = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        scheduleEl.value = local;
+      } else {
+        scheduleEl.value = "";
+      }
+    } else {
+      scheduleEl.value = "";
+    }
+  }
+
+  pillFeatured?.classList.toggle("on", featured);
+  pillDraft?.classList.toggle("on", draft);
+
+  if (deleteBtn) deleteBtn.style.display = "inline-flex";
+
+  if (dropEl) {
+    if (currentImage) {
+      dropEl.innerHTML = `<b>Image selected</b><small>Click to replace</small>`;
+    }
+  }
+}
+
+/* ---------------- Render posts list ---------------- */
+function renderPosts() {
+  if (!postsEl) return;
+
+  postsEl.innerHTML = "";
+
+  posts.forEach((p, idx) => {
+    const row = document.createElement("div");
+    row.className = "post-item";
+    row.draggable = true;
+    row.dataset.id = p.id;
+
+    const img = document.createElement("img");
+    img.className = "thumb";
+    img.alt = "thumb";
+    img.src = p.image || "";
+
+    const meta = document.createElement("div");
+    meta.className = "post-meta";
+
+    const title = document.createElement("b");
+    title.textContent = p.title || "(untitled)";
+
+    const sub = document.createElement("span");
+    const tags = Array.isArray(p.tags) ? p.tags.slice(0, 3).join(" ") : "";
+    const flags = [p.category, p.featured ? "Featured" : "", p.draft ? "Draft" : ""].filter(Boolean).join(" • ");
+    sub.textContent = `${flags}${tags ? " • " + tags : ""}`;
+
+    meta.appendChild(title);
+    meta.appendChild(sub);
+
+    row.appendChild(img);
+    row.appendChild(meta);
+
+    row.addEventListener("click", () => fillEditor(p));
+
+    // Drag reorder
+    row.addEventListener("dragstart", (e) => {
+      e.dataTransfer?.setData("text/plain", p.id);
+      row.style.opacity = "0.6";
+    });
+    row.addEventListener("dragend", () => {
+      row.style.opacity = "1";
+    });
+    row.addEventListener("dragover", (e) => {
+      e.preventDefault();
+    });
+    row.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const fromId = e.dataTransfer?.getData("text/plain");
+      const toId = row.dataset.id;
+      if (!fromId || !toId || fromId === toId) return;
+
+      const fromIndex = posts.findIndex(x => x.id === fromId);
+      const toIndex = posts.findIndex(x => x.id === toId);
+      if (fromIndex < 0 || toIndex < 0) return;
+
+      const [moved] = posts.splice(fromIndex, 1);
+      posts.splice(toIndex, 0, moved);
+
+      savePosts();
+      renderPosts();
+      renderAnalytics();
+      setStatus("Reordered");
+    });
+
+    postsEl.appendChild(row);
+  });
+}
+
+/* ---------------- Analytics ---------------- */
+function renderAnalytics() {
+  const total = posts.length;
+  const photo = posts.filter(p => p.category === "Photography").length;
+  const art = posts.filter(p => p.category === "Art").length;
+  const feat = posts.filter(p => !!p.featured).length;
+  const drafts = posts.filter(p => !!p.draft).length;
+  const scheduled = posts.filter(p => {
+    if (!p.schedule) return false;
+    const d = new Date(p.schedule);
+    return !Number.isNaN(d.getTime()) && d > new Date();
+  }).length;
+
+  if (countTotal) countTotal.textContent = String(total);
+  if (countPhoto) countPhoto.textContent = String(photo);
+  if (countArt) countArt.textContent = String(art);
+  if (countFeatured) countFeatured.textContent = String(feat);
+  if (countDraft) countDraft.textContent = String(drafts);
+  if (countScheduled) countScheduled.textContent = String(scheduled);
+}
+
+/* ---------------- Actions ---------------- */
+async function handleFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    setStatus("Please upload an image file.");
+    return;
+  }
+
+  try {
+    currentImage = await fileToDataURL(file);
+    if (dropEl) dropEl.innerHTML = `<b>Image selected</b><small>Click to replace</small>`;
+    setStatus("Image loaded");
+  } catch {
+    setStatus("Failed to read image");
+  }
+}
 
 function savePost() {
-  if (!currentImageData) {
-    statusDiv.textContent = '❌ Please select an image';
+  if (!currentImage) {
+    setStatus("Please upload an image first.");
     return;
   }
 
-  if (!titleInput.value.trim()) {
-    statusDiv.textContent = '❌ Please enter a title';
-    return;
+  const title = String(titleEl?.value || "").trim();
+  const caption = String(captionEl?.value || "").trim();
+  const category = String(categoryEl?.value || "Photography");
+  const tags = normalizeTags(tagsEl?.value || "");
+
+  // schedule (datetime-local) -> ISO
+  let schedule = "";
+  const rawSched = String(scheduleEl?.value || "").trim();
+  if (rawSched) {
+    const d = new Date(rawSched);
+    if (!Number.isNaN(d.getTime())) schedule = d.toISOString();
   }
 
+  if (editingId) {
+    const idx = posts.findIndex(p => p.id === editingId);
+    if (idx >= 0) {
+      posts[idx] = {
+        ...posts[idx],
+        title,
+        caption,
+        category,
+        tags,
+        schedule,
+        featured,
+        draft,
+        image: currentImage,
+        updatedAt: nowISO(),
+      };
+      savePosts();
+      renderPosts();
+      renderAnalytics();
+      setStatus("Updated");
+      return;
+    }
+  }
+
+  // create new
   const post = {
-    id: editingPostId || Date.now(),
-    title: titleInput.value.trim(),
-    category: categorySelect.value,
-    caption: captionTextarea.value.trim(),
-    tags: tagsInput.value.split(/[\s,]+/).filter(t => t),
-    featured: pillFeatured.classList.contains('on'),
-    draft: pillDraft.classList.contains('on'),
-    schedule: scheduleInput.value || null,
-    image: currentImageData,
-    createdAt: editingPostId ? getPostById(editingPostId).createdAt : new Date().toISOString()
+    id: makeId(),
+    title,
+    caption,
+    category,
+    tags,
+    schedule,
+    featured,
+    draft,
+    image: currentImage,
+    createdAt: nowISO(),
+    updatedAt: nowISO(),
   };
 
-  // Save to localStorage
-  const posts = JSON.parse(localStorage.getItem('posts') || '[]');
-  
-  if (editingPostId) {
-    const index = posts.findIndex(p => p.id === editingPostId);
-    if (index !== -1) posts[index] = post;
-  } else {
-    posts.push(post);
-  }
+  // Add to top by default
+  posts.unshift(post);
 
-  localStorage.setItem('posts', JSON.stringify(posts));
-  
-  statusDiv.textContent = '✓ Post saved successfully';
-  resetForm();
+  savePosts();
   renderPosts();
-}
-
-function resetForm() {
-  currentImageData = null;
-  editingPostId = null;
-  titleInput.value = '';
-  categorySelect.value = 'Photography';
-  captionTextarea.value = '';
-  tagsInput.value = '';
-  scheduleInput.value = '';
-  pillFeatured.classList.remove('on');
-  pillDraft.classList.remove('on');
-  deleteBtn.style.display = 'none';
-  drop.innerHTML = 'Drop image here or click';
-  statusDiv.textContent = '';
-  document.getElementById('editorTitle').textContent = 'Create post';
-  fileInput.value = '';
+  renderAnalytics();
+  setStatus("Published");
+  resetEditor();
 }
 
 function deletePost() {
-  if (!editingPostId) return;
-  
-  const posts = JSON.parse(localStorage.getItem('posts') || '[]');
-  const filtered = posts.filter(p => p.id !== editingPostId);
-  localStorage.setItem('posts', JSON.stringify(filtered));
-  
-  statusDiv.textContent = '✓ Post deleted';
-  resetForm();
+  if (!editingId) return;
+  const idx = posts.findIndex(p => p.id === editingId);
+  if (idx < 0) return;
+  const ok = confirm("Delete this post?");
+  if (!ok) return;
+  posts.splice(idx, 1);
+  savePosts();
   renderPosts();
+  renderAnalytics();
+  setStatus("Deleted");
+  resetEditor();
 }
 
-function getPostById(id) {
-  const posts = JSON.parse(localStorage.getItem('posts') || '[]');
-  return posts.find(p => p.id === id);
-}
-
-// ============ POST RENDERING ============
-
-function renderPosts() {
-  const posts = JSON.parse(localStorage.getItem('posts') || '[]');
-  postsContainer.innerHTML = '';
-
-  posts.forEach((post, index) => {
-    const postEl = document.createElement('div');
-    postEl.className = 'post';
-    postEl.draggable = true;
-    postEl.dataset.id = post.id;
-
-    postEl.innerHTML = `
-      <div class="dragHandle">⋮⋮</div>
-      <div class="thumb">
-        <img src="${post.image}" alt="${post.title}"/>
-      </div>
-      <div class="meta">
-        <b>${post.title || 'Untitled'}</b>
-        <div class="small">
-          ${post.category} • ${new Date(post.createdAt).toLocaleDateString()}
-          ${post.featured ? '⭐ Featured' : ''}
-          ${post.draft ? '📝 Draft' : ''}
-          ${post.schedule ? `⏱️ Scheduled for ${new Date(post.schedule).toLocaleString()}` : ''}
-        </div>
-      </div>
-      <div class="actions">
-        <button class="btn2" onclick="editPost(${post.id})">Edit</button>
-        <button class="btn2 danger" onclick="deletePostById(${post.id})">Delete</button>
-      </div>
-    `;
-
-    postsContainer.appendChild(postEl);
-  });
-
-  updateAnalytics();
-}
-
-function editPost(id) {
-  const post = getPostById(id);
-  if (!post) return;
-
-  editingPostId = id;
-  currentImageData = post.image;
-  titleInput.value = post.title;
-  categorySelect.value = post.category;
-  captionTextarea.value = post.caption;
-  tagsInput.value = post.tags.join(' ');
-  scheduleInput.value = post.schedule || '';
-  
-  pillFeatured.classList.toggle('on', post.featured);
-  pillDraft.classList.toggle('on', post.draft);
-  
-  drop.innerHTML = `<img src="${post.image}" alt="${post.title}"/>`;
-  deleteBtn.style.display = '';
-  document.getElementById('editorTitle').textContent = 'Edit post';
-  statusDiv.textContent = '';
-}
-
-function deletePostById(id) {
-  if (confirm('Delete this post?')) {
-    const posts = JSON.parse(localStorage.getItem('posts') || '[]');
-    const filtered = posts.filter(p => p.id !== id);
-    localStorage.setItem('posts', JSON.stringify(filtered));
-    renderPosts();
-  }
-}
-
-// ============ FEATURED & DRAFT PILLS ============
-
-pillFeatured.addEventListener('click', () => pillFeatured.classList.toggle('on'));
-pillDraft.addEventListener('click', () => pillDraft.classList.toggle('on'));
-
-// ============ ANALYTICS ============
-
-function updateAnalytics() {
-  const posts = JSON.parse(localStorage.getItem('posts') || '[]');
-  
-  const photography = posts.filter(p => p.category === 'Photography').length;
-  const art = posts.filter(p => p.category === 'Art').length;
-  const featured = posts.filter(p => p.featured).length;
-  const drafts = posts.filter(p => p.draft).length;
-  const scheduled = posts.filter(p => p.schedule && new Date(p.schedule) > new Date()).length;
-  const visible = posts.filter(p => !p.draft && (!p.schedule || new Date(p.schedule) <= new Date())).length;
-  
-  const allTags = new Set();
-  posts.forEach(p => p.tags.forEach(tag => allTags.add(tag.toLowerCase())));
-
-  document.getElementById('statTotal').textContent = posts.length;
-  document.getElementById('statPhoto').textContent = photography;
-  document.getElementById('statArt').textContent = art;
-  document.getElementById('statFeatured').textContent = featured;
-  document.getElementById('statDrafts').textContent = drafts;
-  document.getElementById('statScheduled').textContent = scheduled;
-  document.getElementById('statVisible').textContent = visible;
-  document.getElementById('statTagCount').textContent = allTags.size;
-}
-
-// ============ EXPORT / IMPORT ============
-
-document.getElementById('exportJson').addEventListener('click', () => {
-  const posts = localStorage.getItem('posts') || '[]';
-  const blob = new Blob([posts], { type: 'application/json' });
+function exportJSON() {
+  const data = JSON.stringify(posts, null, 2);
+  const blob = new Blob([data], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = url;
-  a.download = `posts-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.download = "mb_posts_backup.json";
   a.click();
   URL.revokeObjectURL(url);
-});
-
-document.getElementById('importJson').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    try {
-      const data = JSON.parse(event.target.result);
-      if (Array.isArray(data)) {
-        localStorage.setItem('posts', JSON.stringify(data));
-        renderPosts();
-        statusDiv.textContent = '✓ Posts imported';
-        setTimeout(() => statusDiv.textContent = '', 3000);
-      }
-    } catch (err) {
-      statusDiv.textContent = '❌ Invalid JSON file';
-    }
-  };
-  reader.readAsText(file);
-});
-
-document.getElementById('clearAllPosts').addEventListener('click', () => {
-  if (confirm('Delete ALL posts? This cannot be undone.')) {
-    localStorage.clear();
-    renderPosts();
-    resetForm();
-    statusDiv.textContent = '✓ All posts cleared';
-  }
-});
-
-// ============ DRAG AND DROP REORDERING ============
-
-let draggedElement = null;
-
-postsContainer.addEventListener('dragstart', (e) => {
-  if (e.target.closest('.post')) {
-    draggedElement = e.target.closest('.post');
-    draggedElement.classList.add('dragging');
-  }
-});
-
-postsContainer.addEventListener('dragend', () => {
-  if (draggedElement) {
-    draggedElement.classList.remove('dragging');
-  }
-});
-
-postsContainer.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  const post = e.target.closest('.post');
-  if (post && post !== draggedElement) {
-    const rect = post.getBoundingClientRect();
-    const midpoint = rect.top + rect.height / 2;
-    if (e.clientY < midpoint) {
-      post.parentNode.insertBefore(draggedElement, post);
-    } else {
-      post.parentNode.insertBefore(draggedElement, post.nextSibling);
-    }
-    savePosts();
-  }
-});
-
-function savePosts() {
-  const posts = Array.from(postsContainer.querySelectorAll('[data-id]')).map(el => {
-    const id = parseInt(el.dataset.id);
-    return getPostById(id);
-  });
-  localStorage.setItem('posts', JSON.stringify(posts));
 }
 
-// ============ AUTHENTICATION ============
-
-const loginSection = document.getElementById('login');
-const appSection = document.getElementById('app');
-const gateSection = document.getElementById('gate');
-const loginBtn = document.getElementById('loginBtn');
-const logoutBtn = document.getElementById('logoutBtn');
-const pwInput = document.getElementById('pw');
-
-const PASSWORD = 'mb10201944'; // Change this to your password
-
-loginBtn.addEventListener('click', () => {
-  if (pwInput.value === PASSWORD) {
-    sessionStorage.setItem('loggedIn', 'true');
-    loginSection.style.display = 'none';
-    appSection.style.display = '';
-    renderPosts();
-  } else {
-    alert('❌ Incorrect password');
-  }
-});
-
-logoutBtn.addEventListener('click', () => {
-  sessionStorage.removeItem('loggedIn');
-  loginSection.style.display = '';
-  appSection.style.display = 'none';
-  resetForm();
-});
-
-// Check if logged in
-if (sessionStorage.getItem('loggedIn') === 'true') {
-  loginSection.style.display = 'none';
-  appSection.style.display = '';
+function wipeAll() {
+  const ok = confirm("Wipe ALL posts from this browser? This cannot be undone.");
+  if (!ok) return;
+  posts = [];
+  savePosts();
   renderPosts();
-} else {
-  loginSection.style.display = '';
-  appSection.style.display = 'none';
+  renderAnalytics();
+  resetEditor();
+  setStatus("Wiped");
 }
 
-// Initial render
-renderPosts();
+/* ---------------- Init app ---------------- */
+let appInitialized = false;
+function initApp() {
+  if (appInitialized) return;
+  appInitialized = true;
+
+  // Theme
+  setTheme(localStorage.getItem("mb_theme") === "dark");
+  themeToggle?.addEventListener("click", () => {
+    setTheme(!document.body.classList.contains("dark"));
+  });
+
+  // Logout
+  logoutBtn?.addEventListener("click", logout);
+
+  // Drop zone
+  dropEl?.addEventListener("click", () => fileEl?.click());
+  dropEl?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") fileEl?.click();
+  });
+
+  dropEl?.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropEl.classList.add("drag");
+  });
+  dropEl?.addEventListener("dragleave", () => dropEl.classList.remove("drag"));
+  dropEl?.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropEl.classList.remove("drag");
+    const f = e.dataTransfer?.files?.[0];
+    if (f) handleFile(f);
+  });
+
+  fileEl?.addEventListener("change", () => {
+    const f = fileEl.files?.[0];
+    if (f) handleFile(f);
+    if (fileEl) fileEl.value = "";
+  });
+
+  // Pills
+  pillFeatured?.addEventListener("click", () => {
+    featured = !featured;
+    pillFeatured.classList.toggle("on", featured);
+  });
+  pillDraft?.addEventListener("click", () => {
+    draft = !draft;
+    pillDraft.classList.toggle("on", draft);
+  });
+
+  // Buttons
+  saveBtn?.addEventListener("click", savePost);
+  resetBtn?.addEventListener("click", resetEditor);
+  deleteBtn?.addEventListener("click", deletePost);
+
+  exportBtn?.addEventListener("click", exportJSON);
+  wipeBtn?.addEventListener("click", wipeAll);
+
+  // Load + render
+  loadPosts();
+  resetEditor();
+  renderPosts();
+  renderAnalytics();
+}
+
+/* ---------------- Login events ---------------- */
+loginBtn?.addEventListener("click", login);
+pwEl?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") login();
+});
+
+// Boot
+checkAccessAndBoot();
