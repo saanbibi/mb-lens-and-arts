@@ -13,7 +13,8 @@ const ADMIN_PASSWORD = "mb10201944";
 /* ---------------- DOM ---------------- */
 
 // Gate
-const gateEl = document.getElementById("gate");
+const gateEl = document.getElementById("gate"); // "Not found" / hidden screen
+const loginEl = document.getElementById("login"); // password screen
 const appEl = document.getElementById("app");
 const pwInput = document.getElementById("pw");
 const loginBtn = document.getElementById("loginBtn");
@@ -170,9 +171,20 @@ function isAuthed() {
   return sessionStorage.getItem(SESSION_KEY) === "1";
 }
 
-function showGate(msg = "") {
+function showHidden(msg = "This page is hidden."){
+  // Show the fake "Not found" screen when URL does not include ?mbcms
   if (appEl) appEl.style.display = "none";
+  if (loginEl) loginEl.style.display = "none";
   if (gateEl) gateEl.style.display = "flex";
+  const p = gateEl?.querySelector("p");
+  if (p && msg) p.textContent = msg;
+}
+
+function showGate(msg = "") {
+  // Show password login UI
+  if (gateEl) gateEl.style.display = "none";
+  if (appEl) appEl.style.display = "none";
+  if (loginEl) loginEl.style.display = "block";
   if (pwMsg) pwMsg.textContent = msg;
   if (pwInput) pwInput.value = "";
   pwInput?.focus();
@@ -180,6 +192,7 @@ function showGate(msg = "") {
 
 function showApp() {
   if (gateEl) gateEl.style.display = "none";
+  if (loginEl) loginEl.style.display = "none";
   if (appEl) appEl.style.display = "block";
 }
 
@@ -494,7 +507,14 @@ resetAnalyticsBtn?.addEventListener("click", () => {
 });
 
 // Boot
-if (isAuthed()) {
+// Require the secret query flag (?mbcms) to reveal login.
+const params = new URLSearchParams(window.location.search);
+const hasMbCms = params.has("mbcms");
+
+if (!hasMbCms) {
+  showHidden("This page is hidden.");
+} else if (isAuthed()) {
+  bumpAdminVisit();
   showApp();
   initApp();
 } else {
