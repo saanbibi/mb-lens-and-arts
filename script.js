@@ -1,4 +1,3 @@
-const STORAGE_KEY = "mb_posts";
 
 const galleryGrid = document.getElementById("galleryGrid");
 const featuredGrid = document.getElementById("featuredGrid");
