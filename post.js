@@ -1,22 +1,46 @@
-const STORAGE_KEY = "mb_posts";
-const ANALYTICS_KEY = "mb_analytics_v1";
 
-function getAnalytics(){
+function readViews(){
   try{
-    return JSON.parse(localStorage.getItem(ANALYTICS_KEY) || "null") || {
-      index:0, gallery:0, post:0, modal:0, search:0, tag:0, admin:0, last:null
-    };
+    const obj = JSON.parse(localStorage.getItem(VIEWS_KEY) || "{}");
+    return obj && typeof obj === "object" ? obj : {};
   }catch{
-    return { index:0, gallery:0, post:0, modal:0, search:0, tag:0, admin:0, last:null };
+    return {};
   }
 }
 
-function bumpAnalytics(field){
-  const a = getAnalytics();
-  a[field] = (a[field] || 0) + 1;
-  a.last = new Date().toISOString();
-  localStorage.setItem(ANALYTICS_KEY, JSON.stringify(a));
+function getViewCount(id){
+  const map = readViews();
+  return Number(map?.[id] || 0) || 0;
 }
+
+function incrementView(id){
+  if(!id) return 0;
+
+  // prevent double counting in the same tab session for the same post
+  const sk = `mb_viewed_${id}`;
+  if(sessionStorage.getItem(sk) === "1") return getViewCount(id);
+
+  const map = readViews();
+  map[id] = (Number(map[id]) || 0) + 1;
+  localStorage.setItem(VIEWS_KEY, JSON.stringify(map));
+  sessionStorage.setItem(sk, "1");
+  return Number(map[id]) || 0;
+}
+
+function b64UrlDecode(str){
+  try{
+    let s = String(str || "").replaceAll("-", "+").replaceAll("_", "/");
+    // pad
+    while(s.length % 4) s += "=";
+    const json = decodeURIComponent(escape(atob(s)));
+    return json;
+  }catch{
+    return "";
+  }
+}
+const STORAGE_KEY = "mb_posts";
+
+const VIEWS_KEY = "mb_views";
 
 function qs(sel){ return document.querySelector(sel); }
 
@@ -162,6 +186,8 @@ function main(){
   const id = new URLSearchParams(location.search).get("id");
   const posts = getPosts();
   const post = posts.find(p => String(p.id) === String(id));
+  // Count a view (stored per-device)
+  if(post?.id) incrementView(post.id);
 
   // basic visibility check: don't show drafts/future scheduled
   const now = new Date();
@@ -169,9 +195,6 @@ function main(){
   const hidden = !post || post.draft || (sched && !Number.isNaN(sched.getTime()) && sched > now);
 
   if(hidden) return renderMissing(mount);
-
-  // analytics: post view
-  bumpAnalytics("post");
 
   renderPost(mount, post);
 }
