@@ -1,3 +1,88 @@
+const STORAGE_KEY = "mb_posts";
+
+/* -----------------------------
+   Gate / Auth (fixed password)
+   NOTE: This is client-side only (not real security on a public GitHub Pages site).
+------------------------------ */
+
+const SECRET_PARAM = "mbcms";
+const SESSION_KEY = "mb_cms_unlocked";
+const ADMIN_PASSWORD = "mb10201944";
+
+const gateEl = document.getElementById("gate");
+const loginEl = document.getElementById("login");
+const appEl = document.getElementById("app");
+
+const pwEl = document.getElementById("pw");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const pwStatus = document.getElementById("pwStatus");
+
+function hasSecretParam(){
+  const qs = String(window.location.search || "").toLowerCase();
+  return qs.includes(SECRET_PARAM);
+}
+
+function isAuthed(){
+  return sessionStorage.getItem(SESSION_KEY) === "1";
+}
+
+function setAuthed(v){
+  if(v) sessionStorage.setItem(SESSION_KEY, "1");
+  else sessionStorage.removeItem(SESSION_KEY);
+}
+
+function show(el){ el?.classList.remove("hidden"); }
+function hide(el){ el?.classList.add("hidden"); }
+
+function initGate(){
+  if(!hasSecretParam()){
+    show(gateEl);
+    hide(loginEl);
+    hide(appEl);
+    return;
+  }
+
+  hide(gateEl);
+
+  if(isAuthed()){
+    hide(loginEl);
+    show(appEl);
+  }else{
+    show(loginEl);
+    hide(appEl);
+    pwEl?.focus();
+  }
+}
+
+loginBtn?.addEventListener("click", () => {
+  const pw = String(pwEl?.value || "");
+  if(pw === ADMIN_PASSWORD){
+    setAuthed(true);
+    pwStatus.textContent = "";
+    hide(loginEl);
+    show(appEl);
+    safeLoad();
+  }else{
+    pwStatus.textContent = "Wrong password.";
+    pwEl?.focus();
+  }
+});
+
+pwEl?.addEventListener("keydown", (e) => {
+  if(e.key === "Enter"){
+    e.preventDefault();
+    loginBtn?.click();
+  }
+});
+
+logoutBtn?.addEventListener("click", () => {
+  setAuthed(false);
+  show(loginEl);
+  hide(appEl);
+  pwEl?.focus();
+});
+
 // Get DOM elements
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('file');
