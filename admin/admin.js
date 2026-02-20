@@ -1,601 +1,502 @@
-const POSTS_KEY = "mb_posts";
-const PASSWORD_HASH = "73f6f90cce67ed96765b75113c3f4533ed2dd5f2be4aee66647dfb28da547ff0";
-// password is fixed (no one can set/replace it)
-
-const SESSION_KEY = "mb_cms_session";
-const SECRET_PARAM = "mbcms";
-
-// Gate + auth elements
-const gateEl = document.getElementById("gate");
-const loginEl = document.getElementById("login");
-const appEl = document.getElementById("app");
-
-const pwEl = document.getElementById("pw");
-const loginBtn = document.getElementById("loginBtn");
-const logoutBtn = document.getElementById("logoutBtn");
-
-// Editor elements
-const drop = document.getElementById("drop");
-const fileInput = document.getElementById("file");
-
-const editorTitle = document.getElementById("editorTitle");
-const titleEl = document.getElementById("title");
-const categoryEl = document.getElementById("category");
-const captionEl = document.getElementById("caption");
-const tagsEl = document.getElementById("tags");
-const scheduleEl = document.getElementById("schedule");
-
-const pillFeatured = document.getElementById("pillFeatured");
-const pillDraft = document.getElementById("pillDraft");
-
-const saveBtn = document.getElementById("saveBtn");
-const resetBtn = document.getElementById("resetBtn");
-const deleteBtn = document.getElementById("deleteBtn");
-const statusEl = document.getElementById("status");
-
-const postsEl = document.getElementById("posts");
-const wipeBtn = document.getElementById("wipeBtn");
-const exportBtn = document.getElementById("exportBtn");
-
-// State
-let posts = [];
-let editingId = null;
-let currentImageDataUrl = null;
-let featuredOn = false;
-let draftOn = false;
-
-/* -----------------------------
-   Helpers
------------------------------- */
-function getQuery(){
-  return new URLSearchParams(location.search);
-}
-
-function getPosts(){
-  try{
-    return JSON.parse(localStorage.getItem(POSTS_KEY) || "[]");
-  }catch{
-    return [];
-  }
-}
-
-function setPosts(next){
-  localStorage.setItem(POSTS_KEY, JSON.stringify(next));
-}
-
-function normalizeTags(input){
-  // input can be string or array
-  let arr = [];
-  if (Array.isArray(input)) arr = input;
-  else arr = String(input || "")
-    .split(/[\s,]+/g)
-    .map(s => s.trim())
-    .filter(Boolean);
-
-  return arr.map(t => t.startsWith("#") ? t : `#${t}`)
-           .map(t => t.replace(/#+/g, "#"))
-           .filter((t, i, a) => a.indexOf(t) === i);
-}
-
-function fmtDate(iso){
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, { year:"numeric", month:"short", day:"2-digit", hour:"2-digit", minute:"2-digit" });
-}
-
-function toast(msg){
-  statusEl.textContent = msg;
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => statusEl.textContent = "", 2800);
-}
-
-async function sha256(text){
-  const buf = new TextEncoder().encode(text);
-  const hash = await crypto.subtle.digest("SHA-256", buf);
-  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,"0")).join("");
-}
-
-function isAuthed(){
-  return localStorage.getItem(SESSION_KEY) === "true";
-}
-
-function setAuthed(on){
-  localStorage.setItem(SESSION_KEY, on ? "true" : "false");
-}
-
-/* -----------------------------
-   Gate + Login (fixed password)
------------------------------- */
-
-const SESSION_KEY = "mb_cms_authed";
-
-function isAuthed(){
-  return sessionStorage.getItem(SESSION_KEY) === "1";
-}
-function setAuthed(v){
-  if(v) sessionStorage.setItem(SESSION_KEY, "1");
-  else sessionStorage.removeItem(SESSION_KEY);
-}
-
-async function sha256(text){
-  const enc = new TextEncoder().encode(text);
-  const buf = await crypto.subtle.digest("SHA-256", enc);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
-}
-
-function showGate(){
-  gate?.classList.add("show");
-  app?.classList.remove("show");
-  pwEl?.focus();
-}
-function showApp(){
-  gate?.classList.remove("show");
-  app?.classList.add("show");
-}
-
-async function attemptLogin(){
-  const pw = String(pwEl?.value || "").trim();
-  if(!pw){
-    if(pwMsg) pwMsg.textContent = "Enter password.";
-    return;
-  }
-
-  const hashed = await sha256(pw);
-
-  if(hashed === PASSWORD_HASH){
-    setAuthed(true);
-    if(pwMsg) pwMsg.textContent = "";
-    if(pwEl) pwEl.value = "";
-    showApp();
-    loadPosts();
-    return;
-  }
-
-  if(pwMsg) pwMsg.textContent = "Wrong password.";
-}
-
-function initAuth(){
-  // only allow when opened with ?mbcms (your hidden shortcut already does this)
-  const ok = new URLSearchParams(location.search).has("mbcms");
-  if(!ok){
-    document.body.innerHTML = "<div style='font-family:system-ui;padding:24px'>Not found.</div>";
-    return;
-  }
-
-  if(isAuthed()) showApp();
-  else showGate();
-
-  loginBtn?.addEventListener("click", attemptLogin);
-  pwEl?.addEventListener("keydown", (e) => {
-    if(e.key === "Enter") attemptLogin();
-  });
-
-  logoutBtn?.addEventListener("click", () => {
-    setAuthed(false);
-    showGate();
-  });
-}
-
-initAuth();
-
-/* -----------------------------
-   Image compression
------------------------------- */
-async function compressImage(file, maxW = 1920, quality = 0.82){
-  // returns dataURL (jpeg)
-  const img = await fileToImage(file);
-
-  const scale = Math.min(1, maxW / img.width);
-  const w = Math.round(img.width * scale);
-  const h = Math.round(img.height * scale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, w, h);
-
-  return canvas.toDataURL("image/jpeg", quality);
-}
-
-function fileToImage(file){
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("read failed"));
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("image failed"));
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-/* -----------------------------
-   Dropzone
------------------------------- */
-drop.addEventListener("click", () => fileInput.click());
-drop.addEventListener("keydown", (e) => { if (e.key === "Enter") fileInput.click(); });
-
-drop.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  drop.classList.add("drag");
-});
-drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
-drop.addEventListener("drop", async (e) => {
-  e.preventDefault();
-  drop.classList.remove("drag");
-  const f = e.dataTransfer.files?.[0];
-  if (f) await onPickFile(f);
-});
-
-fileInput.addEventListener("change", async (e) => {
-  const f = e.target.files?.[0];
-  if (f) await onPickFile(f);
-});
-
-async function onPickFile(file){
-  if (!file.type.startsWith("image/")) return alert("Please upload an image file.");
-  toast("Compressing image...");
-  currentImageDataUrl = await compressImage(file);
-  drop.innerHTML = `<img src="${currentImageDataUrl}" alt="Preview">`;
-  toast("Image ready.");
-}
-
-/* -----------------------------
-   Editor toggles
------------------------------- */
-pillFeatured.addEventListener("click", () => {
-  featuredOn = !featuredOn;
-  pillFeatured.classList.toggle("on", featuredOn);
-});
-
-pillDraft.addEventListener("click", () => {
-  draftOn = !draftOn;
-  pillDraft.classList.toggle("on", draftOn);
-});
-
-/* -----------------------------
-   CRUD
------------------------------- */
-function resetEditor(){
-  editingId = null;
-  currentImageDataUrl = null;
-  featuredOn = false;
-  draftOn = false;
-
-  editorTitle.textContent = "Create post";
-  saveBtn.textContent = "Publish";
-  deleteBtn.style.display = "none";
-
-  titleEl.value = "";
-  captionEl.value = "";
-  tagsEl.value = "";
-  scheduleEl.value = "";
-  categoryEl.value = "Photography";
-
-  pillFeatured.classList.remove("on");
-  pillDraft.classList.remove("on");
-
-  drop.textContent = "Drop image here or click";
-  fileInput.value = "";
-}
-
-resetBtn.addEventListener("click", resetEditor);
-
-saveBtn.addEventListener("click", () => {
-  if (!currentImageDataUrl) return alert("Please upload an image.");
-
-  const nowIso = new Date().toISOString();
-  const title = titleEl.value.trim();
-  const caption = captionEl.value.trim();
-  const category = categoryEl.value === "Art" ? "Art" : "Photography";
-
-  const tags = normalizeTags(tagsEl.value);
-  const schedule = scheduleEl.value ? new Date(scheduleEl.value).toISOString() : "";
-
-  const post = {
-    id: editingId || crypto.randomUUID(),
-    title,
-    caption,
-    category,
-    tags,
-    featured: featuredOn,
-    draft: draftOn,
-    schedule,
-    image: currentImageDataUrl,
-    updatedAt: nowIso,
-    createdAt: editingId ? (posts.find(p => p.id === editingId)?.createdAt || nowIso) : nowIso
-  };
-
-  if (editingId){
-    posts = posts.map(p => p.id === editingId ? post : p);
-    toast("Updated.");
-  } else {
-    posts.unshift(post);
-    toast("Published.");
-  }
-
-  setPosts(posts);
-  renderPosts();
-  resetEditor();
-});
-
-deleteBtn.addEventListener("click", () => {
-  if (!editingId) return;
-  const ok = confirm("Delete this post?");
-  if (!ok) return;
-
-  posts = posts.filter(p => p.id !== editingId);
-  setPosts(posts);
-  renderPosts();
-  resetEditor();
-  toast("Deleted.");
-});
-
-wipeBtn.addEventListener("click", () => {
-  const ok = confirm("Wipe ALL posts? This cannot be undone.");
-  if (!ok) return;
-  posts = [];
-  setPosts(posts);
-  renderPosts();
-  resetEditor();
-  toast("Wiped.");
-});
-
-exportBtn.addEventListener("click", () => {
-  const data = JSON.stringify(posts, null, 2);
-  const blob = new Blob([data], { type:"application/json" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "mb_posts_export.json";
-  a.click();
-
-  URL.revokeObjectURL(url);
-});
-
-/* -----------------------------
-   List + drag reorder
------------------------------- */
-function renderPosts(){
-  // Stats (published only)
-  const now = Date.now();
-  const published = posts.filter(p => {
-    if (p?.draft) return false;
-    if (p?.schedule){
-      const s = new Date(p.schedule);
-      if (!Number.isNaN(s.getTime()) && s.getTime() > now) return false;
-    }
-    return true;
-  });
-
-  const totalPub = published.length;
-  const photoPub = published.filter(p => p.category === "Photography").length;
-  const artPub = published.filter(p => p.category === "Art").length;
-
-  if (statTotal) statTotal.textContent = String(totalPub);
-  if (statPhoto) statPhoto.textContent = String(photoPub);
-  if (statArt) statArt.textContent = String(artPub);
-
-  postsEl.innerHTML = "";
-
-  if (!posts.length){
-    postsEl.innerHTML = `<p style="color:var(--muted); margin-top:12px;">No posts yet.</p>`;
-    return;
-  }
-
-  posts.forEach(p => {
-    const row = document.createElement("div");
-    row.className = "post";
-    row.draggable = true;
-    row.dataset.id = p.id;
-
-    const tags = normalizeTags(p.tags);
-    const flags = [
-      p.featured ? "⭐ featured" : "",
-      p.draft ? "📝 draft" : "",
-      p.schedule ? `⏰ ${fmtDate(p.schedule)}` : ""
-    ].filter(Boolean).join(" • ");
-
-    row.innerHTML = `
-      <div class="thumb">${p.image ? `<img src="${p.image}" alt="">` : ""}</div>
-      <div class="meta">
-        <b>${escapeHtml(p.title || "(untitled)")}</b>
-        <div class="small">
-          ${escapeHtml(p.category)}${flags ? ` • ${escapeHtml(flags)}` : ""}<br>
-          ${p.caption ? escapeHtml(p.caption.slice(0, 90)) + (p.caption.length > 90 ? "…" : "") : ""}<br>
-          ${tags.length ? escapeHtml(tags.join(" ")) : ""}
-        </div>
-      </div>
-      <div class="actions">
-        <span class="dragHandle" title="Drag to reorder">⠿</span>
-        <button class="btn2" type="button">Edit</button>
-      </div>
-    `;
-
-    const editBtn = row.querySelector("button.btn2");
-    editBtn.addEventListener("click", () => loadIntoEditor(p.id));
-
-    // DnD reorder
-    row.addEventListener("dragstart", () => row.classList.add("dragging"));
-    row.addEventListener("dragend", () => row.classList.remove("dragging"));
-
-    postsEl.appendChild(row);
-  });
-
-  enableDnD();
-}
-
-function enableDnD(){
-  postsEl.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    const dragging = postsEl.querySelector(".dragging");
-    if (!dragging) return;
-
-    const after = getDragAfterElement(postsEl, e.clientY);
-    if (after == null) postsEl.appendChild(dragging);
-    else postsEl.insertBefore(dragging, after);
-  });
-
-  postsEl.addEventListener("drop", () => {
-    // Read order from DOM
-    const ids = [...postsEl.querySelectorAll(".post")].map(el => el.dataset.id);
-    posts = ids.map(id => posts.find(p => p.id === id)).filter(Boolean);
-    setPosts(posts);
-    toast("Reordered.");
-  });
-}
-
-function getDragAfterElement(container, y){
-  const els = [...container.querySelectorAll(".post:not(.dragging)")];
-  let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
-
-  for (const el of els){
-    const box = el.getBoundingClientRect();
-    const offset = y - box.top - box.height / 2;
-    if (offset < 0 && offset > closest.offset){
-      closest = { offset, element: el };
-    }
-  }
-  return closest.element;
-}
-
-/* -----------------------------
-   Load editor
------------------------------- */
-function loadIntoEditor(id){
-  const p = posts.find(x => x.id === id);
-  if (!p) return;
-
-  editingId = p.id;
-  currentImageDataUrl = p.image;
-
-  editorTitle.textContent = "Edit post";
-  saveBtn.textContent = "Save";
-  deleteBtn.style.display = "";
-
-  titleEl.value = p.title || "";
-  captionEl.value = p.caption || "";
-  categoryEl.value = p.category === "Art" ? "Art" : "Photography";
-  tagsEl.value = normalizeTags(p.tags).join(" ");
-
-  featuredOn = !!p.featured;
-  draftOn = !!p.draft;
-  pillFeatured.classList.toggle("on", featuredOn);
-  pillDraft.classList.toggle("on", draftOn);
-
-  scheduleEl.value = p.schedule ? toLocalDatetimeValue(p.schedule) : "";
-
-  drop.innerHTML = `<img src="${p.image}" alt="Preview">`;
-  toast("Loaded for editing.");
-}
-
-function toLocalDatetimeValue(iso){
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = n => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function escapeHtml(s){
-  return String(s)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#39;");
-}
-
-/* -----------------------------
-   Init
------------------------------- */
-function load(){
-  posts = getPosts();
-  resetEditor();
-  renderPosts();
-}
+// MB Lens & Arts — Admin (static CMS)
+// Note: This is a static-site admin. The password is only a client-side gate.
+// Anyone who can view your repo can see the password in this file.
 
 const STORAGE_KEY = "mb_posts";
+const THEME_KEY = "mb_theme";
+const SESSION_KEY = "mb_admin_authed";
+const ANALYTICS_KEY = "mb_analytics_v1";
 
-function downloadFile(filename, text){
-  const blob = new Blob([text], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+// Hardcoded gate password (your request)
+const ADMIN_PASSWORD = "mb10201944";
 
-function safeLoad(){
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-  catch { return []; }
-}
+/* ---------------- DOM ---------------- */
 
-function safeSave(data){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
+// Gate
+const gateEl = document.getElementById("gate");
+const appEl = document.getElementById("app");
+const pwInput = document.getElementById("pw");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const pwMsg = document.getElementById("pwMsg");
 
-document.getElementById("exportJson")?.addEventListener("click", () => {
-  const data = safeLoad();
-  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-  downloadFile(`mb-portfolio-backup-${stamp}.json`, JSON.stringify(data, null, 2));
-});
+// Theme
+const themeBtn = document.getElementById("themeBtn");
 
-document.getElementById("importJson")?.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  if(!file) return;
+// Form
+const form = document.getElementById("postForm");
+const fId = document.getElementById("fId");
+const fTitle = document.getElementById("fTitle");
+const fCaption = document.getElementById("fCaption");
+const fCategory = document.getElementById("fCategory");
+const fTags = document.getElementById("fTags");
+const fFeatured = document.getElementById("fFeatured");
+const fDraft = document.getElementById("fDraft");
+const fSchedule = document.getElementById("fSchedule");
+const fImg = document.getElementById("fImg");
+const imgPreview = document.getElementById("imgPreview");
+const saveBtn = document.getElementById("saveBtn");
+const cancelEditBtn = document.getElementById("cancelEditBtn");
 
-  const text = await file.text();
-  let data;
-  try{
-    data = JSON.parse(text);
-  }catch{
-    alert("Invalid JSON file.");
-    return;
-  }
-
-  if(!Array.isArray(data)){
-    alert("Backup format invalid. Expected an array.");
-    return;
-  }
-
-  // basic validation (not strict)
-  const cleaned = data
-    .filter(p => p && typeof p === "object")
-    .map(p => ({
-      id: p.id ?? crypto.randomUUID?.() ?? String(Date.now()),
-      title: String(p.title || ""),
-      caption: String(p.caption || ""),
-      category: String(p.category || "Photography"),
-      image: String(p.image || ""),
-      tags: Array.isArray(p.tags) ? p.tags : [],
-      featured: !!p.featured,
-      draft: !!p.draft,
-      schedule: p.schedule || ""
-    }));
-
-  safeSave(cleaned);
-  alert("Import complete! Refresh admin + index page.");
-});
-
-document.getElementById("clearAllPosts")?.addEventListener("click", () => {
-  const ok = confirm("Delete ALL posts? This cannot be undone unless you exported a backup.");
-  if(!ok) return;
-  safeSave([]);
-  alert("All posts cleared. Refresh admin + index page.");
-});
-
-checkAccess();
-
-// Admin stats
+// List + stats
+const listEl = document.getElementById("list");
 const statTotal = document.getElementById("statTotal");
 const statPhoto = document.getElementById("statPhoto");
 const statArt = document.getElementById("statArt");
+
+// Analytics stats
+const anIndex = document.getElementById("anIndex");
+const anGallery = document.getElementById("anGallery");
+const anPost = document.getElementById("anPost");
+const anModal = document.getElementById("anModal");
+const anSearch = document.getElementById("anSearch");
+const anTag = document.getElementById("anTag");
+const anLast = document.getElementById("anLast");
+const resetAnalyticsBtn = document.getElementById("resetAnalyticsBtn");
+
+// Backup/restore
+const exportBtn = document.getElementById("exportBtn");
+const importInput = document.getElementById("importInput");
+const importBtn = document.getElementById("importBtn");
+const clearBtn = document.getElementById("clearBtn");
+
+/* ---------------- State ---------------- */
+
+let posts = [];
+let editImageDataUrl = null; // if editing without re-upload
+
+/* ---------------- Helpers ---------------- */
+
+function uid() {
+  return "p_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function normalizeTags(input) {
+  // input: string "#a #b" OR array
+  const arr = Array.isArray(input)
+    ? input
+    : String(input || "")
+        .split(/[,\n\t\s]+/)
+        .filter(Boolean);
+
+  return arr
+    .map((t) => String(t || "").trim())
+    .filter(Boolean)
+    .map((t) => (t.startsWith("#") ? t : `#${t}`));
+}
+
+function loadPosts() {
+  try {
+    posts = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") || [];
+  } catch {
+    posts = [];
+  }
+}
+
+function savePosts() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+}
+
+function isPublished(post) {
+  if (post.draft) return false;
+  if (post.schedule) {
+    const s = new Date(post.schedule);
+    if (!Number.isNaN(s.getTime()) && s > new Date()) return false;
+  }
+  return true;
+}
+
+function setTheme(dark) {
+  document.body.classList.toggle("dark", !!dark);
+  localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
+  if (themeBtn) themeBtn.textContent = dark ? "Light" : "Dark";
+}
+
+/* ---------------- Analytics (local) ---------------- */
+
+function getAnalytics() {
+  try {
+    return (
+      JSON.parse(localStorage.getItem(ANALYTICS_KEY) || "null") || {
+        index: 0,
+        gallery: 0,
+        post: 0,
+        modal: 0,
+        search: 0,
+        tag: 0,
+        admin: 0,
+        last: null,
+      }
+    );
+  } catch {
+    return { index: 0, gallery: 0, post: 0, modal: 0, search: 0, tag: 0, admin: 0, last: null };
+  }
+}
+
+function setAnalytics(a) {
+  localStorage.setItem(ANALYTICS_KEY, JSON.stringify(a));
+}
+
+function bumpAdminVisit() {
+  const a = getAnalytics();
+  a.admin = (a.admin || 0) + 1;
+  a.last = new Date().toISOString();
+  setAnalytics(a);
+}
+
+function renderAnalytics() {
+  const a = getAnalytics();
+  if (anIndex) anIndex.textContent = String(a.index || 0);
+  if (anGallery) anGallery.textContent = String(a.gallery || 0);
+  if (anPost) anPost.textContent = String(a.post || 0);
+  if (anModal) anModal.textContent = String(a.modal || 0);
+  if (anSearch) anSearch.textContent = String(a.search || 0);
+  if (anTag) anTag.textContent = String(a.tag || 0);
+  if (anLast) anLast.textContent = a.last ? new Date(a.last).toLocaleString() : "—";
+}
+
+/* ---------------- Auth gate ---------------- */
+
+function isAuthed() {
+  return sessionStorage.getItem(SESSION_KEY) === "1";
+}
+
+function showGate(msg = "") {
+  if (appEl) appEl.style.display = "none";
+  if (gateEl) gateEl.style.display = "flex";
+  if (pwMsg) pwMsg.textContent = msg;
+  if (pwInput) pwInput.value = "";
+  pwInput?.focus();
+}
+
+function showApp() {
+  if (gateEl) gateEl.style.display = "none";
+  if (appEl) appEl.style.display = "block";
+}
+
+function login() {
+  const v = String(pwInput?.value || "");
+  if (v === ADMIN_PASSWORD) {
+    sessionStorage.setItem(SESSION_KEY, "1");
+    showApp();
+    initApp();
+  } else {
+    showGate("Wrong password");
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem(SESSION_KEY);
+  showGate("");
+}
+
+/* ---------------- Image handling ---------------- */
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function compressImageDataUrl(dataUrl, maxW = 1800, quality = 0.82) {
+  // Browser-side compression (good enough for GitHub Pages)
+  const img = new Image();
+  img.src = dataUrl;
+  await img.decode();
+
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  const scale = Math.min(1, maxW / Math.max(w, h));
+  const cw = Math.round(w * scale);
+  const ch = Math.round(h * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, cw, ch);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+/* ---------------- Render ---------------- */
+
+function renderStats() {
+  const published = posts.filter(isPublished);
+  const total = published.length;
+  const photo = published.filter((p) => p.category === "Photography").length;
+  const art = published.filter((p) => p.category === "Art").length;
+
+  if (statTotal) statTotal.textContent = String(total);
+  if (statPhoto) statPhoto.textContent = String(photo);
+  if (statArt) statArt.textContent = String(art);
+}
+
+function renderList() {
+  if (!listEl) return;
+  listEl.innerHTML = "";
+
+  const sorted = [...posts].sort((a, b) => (a.order ?? 999999) - (b.order ?? 999999));
+
+  sorted.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "item";
+
+    const status = isPublished(p)
+      ? "Published"
+      : p.draft
+      ? "Draft"
+      : p.schedule
+      ? "Scheduled"
+      : "Hidden";
+
+    row.innerHTML = `
+      <div class="item-left">
+        <img class="thumb" src="${escapeHtml(p.image || "")}" alt="">
+        <div class="item-meta">
+          <div class="item-title">${escapeHtml(p.title || "(Untitled)")}</div>
+          <div class="item-sub">${escapeHtml(p.category || "")} • ${escapeHtml(status)}${p.featured ? " • Featured" : ""}</div>
+        </div>
+      </div>
+      <div class="item-actions">
+        <button class="btn2" data-act="up">↑</button>
+        <button class="btn2" data-act="down">↓</button>
+        <button class="btn2" data-act="edit">Edit</button>
+        <button class="btn2 danger" data-act="del">Delete</button>
+      </div>
+    `;
+
+    row.querySelectorAll("button").forEach((b) => {
+      b.addEventListener("click", () => {
+        const act = b.getAttribute("data-act");
+        if (act === "edit") startEdit(p.id);
+        if (act === "del") delPost(p.id);
+        if (act === "up") movePost(p.id, -1);
+        if (act === "down") movePost(p.id, +1);
+      });
+    });
+
+    listEl.appendChild(row);
+  });
+}
+
+function renderAll() {
+  renderStats();
+  renderList();
+  renderAnalytics();
+}
+
+/* ---------------- CRUD ---------------- */
+
+function clearForm() {
+  if (fId) fId.value = "";
+  fTitle.value = "";
+  fCaption.value = "";
+  fCategory.value = "Photography";
+  fTags.value = "";
+  fFeatured.checked = false;
+  fDraft.checked = false;
+  fSchedule.value = "";
+  if (fImg) fImg.value = "";
+  editImageDataUrl = null;
+  if (imgPreview) imgPreview.src = "";
+  cancelEditBtn.style.display = "none";
+  saveBtn.textContent = "Save";
+}
+
+function startEdit(id) {
+  const p = posts.find((x) => x.id === id);
+  if (!p) return;
+
+  fId.value = p.id;
+  fTitle.value = p.title || "";
+  fCaption.value = p.caption || "";
+  fCategory.value = p.category || "Photography";
+  fTags.value = normalizeTags(p.tags).join(" ");
+  fFeatured.checked = !!p.featured;
+  fDraft.checked = !!p.draft;
+  fSchedule.value = p.schedule ? String(p.schedule).slice(0, 16) : "";
+  editImageDataUrl = p.image || null;
+  if (imgPreview) imgPreview.src = p.image || "";
+  cancelEditBtn.style.display = "inline-flex";
+  saveBtn.textContent = "Update";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function upsertPost(e) {
+  e.preventDefault();
+
+  const id = fId.value || uid();
+  const now = Date.now();
+  const existing = posts.find((x) => x.id === id);
+
+  let image = editImageDataUrl;
+  const file = fImg?.files?.[0];
+  if (file) {
+    const raw = await readFileAsDataURL(file);
+    image = await compressImageDataUrl(raw);
+  }
+
+  if (!image) {
+    alert("Please upload an image.");
+    return;
+  }
+
+  const newPost = {
+    id,
+    title: String(fTitle.value || "").trim(),
+    caption: String(fCaption.value || "").trim(),
+    category: String(fCategory.value || "Photography"),
+    tags: normalizeTags(fTags.value),
+    featured: !!fFeatured.checked,
+    draft: !!fDraft.checked,
+    schedule: fSchedule.value ? new Date(fSchedule.value).toISOString() : "",
+    updatedAt: now,
+    createdAt: existing?.createdAt || now,
+    order: existing?.order ?? now,
+    image,
+  };
+
+  if (existing) {
+    posts = posts.map((p) => (p.id === id ? newPost : p));
+  } else {
+    posts.push(newPost);
+  }
+
+  savePosts();
+  clearForm();
+  renderAll();
+}
+
+function delPost(id) {
+  const p = posts.find((x) => x.id === id);
+  if (!p) return;
+  if (!confirm(`Delete "${p.title || "(Untitled)"}"?`)) return;
+  posts = posts.filter((x) => x.id !== id);
+  savePosts();
+  renderAll();
+}
+
+function movePost(id, dir) {
+  const sorted = [...posts].sort((a, b) => (a.order ?? 999999) - (b.order ?? 999999));
+  const idx = sorted.findIndex((p) => p.id === id);
+  if (idx < 0) return;
+
+  const j = idx + dir;
+  if (j < 0 || j >= sorted.length) return;
+
+  const a = sorted[idx];
+  const b = sorted[j];
+  const tmp = a.order;
+  a.order = b.order;
+  b.order = tmp;
+
+  // write back
+  posts = posts.map((p) => (p.id === a.id ? a : p.id === b.id ? b : p));
+  savePosts();
+  renderAll();
+}
+
+/* ---------------- Backup / Restore ---------------- */
+
+function exportJson() {
+  const blob = new Blob([JSON.stringify(posts, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "mb_posts_backup.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function importJson() {
+  const file = importInput?.files?.[0];
+  if (!file) return alert("Choose a .json file first");
+  const text = await file.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return alert("Invalid JSON");
+  }
+  if (!Array.isArray(data)) return alert("JSON must be an array of posts");
+  posts = data;
+  savePosts();
+  renderAll();
+  alert("Imported!");
+}
+
+function clearAll() {
+  if (!confirm("Delete ALL posts from this browser?")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  posts = [];
+  renderAll();
+}
+
+/* ---------------- Init ---------------- */
+
+function initApp() {
+  // load
+  loadPosts();
+  renderAll();
+
+  // theme
+  setTheme(localStorage.getItem(THEME_KEY) === "dark");
+
+  // bump admin analytics
+  bumpAdminVisit();
+  renderAnalytics();
+}
+
+// Gate wiring
+loginBtn?.addEventListener("click", login);
+pwInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") login();
+});
+logoutBtn?.addEventListener("click", logout);
+
+// Theme
+themeBtn?.addEventListener("click", () => setTheme(!document.body.classList.contains("dark")));
+
+// Form
+form?.addEventListener("submit", upsertPost);
+cancelEditBtn?.addEventListener("click", clearForm);
+fImg?.addEventListener("change", async () => {
+  const file = fImg.files?.[0];
+  if (!file) return;
+  const raw = await readFileAsDataURL(file);
+  const c = await compressImageDataUrl(raw);
+  editImageDataUrl = c;
+  if (imgPreview) imgPreview.src = c;
+});
+
+// Backup
+exportBtn?.addEventListener("click", exportJson);
+importBtn?.addEventListener("click", importJson);
+clearBtn?.addEventListener("click", clearAll);
+
+// Analytics reset
+resetAnalyticsBtn?.addEventListener("click", () => {
+  if (!confirm("Reset analytics counters for THIS browser?")) return;
+  localStorage.removeItem(ANALYTICS_KEY);
+  renderAnalytics();
+});
+
+// Boot
+if (isAuthed()) {
+  showApp();
+  initApp();
+} else {
+  showGate("");
+}
