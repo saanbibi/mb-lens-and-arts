@@ -1,5 +1,4 @@
 const STORAGE_KEY = "mb_posts";
-const ANALYTICS_KEY = "mb_analytics_v1";
 
 const galleryGrid = document.getElementById("galleryGrid");
 const featuredGrid = document.getElementById("featuredGrid");
@@ -67,25 +66,6 @@ let panBaseY = 0;
 let acList = null;
 let acOpen = false;
 let acIndex = -1;
-
-/* ---------------- Local analytics (per-browser) ---------------- */
-
-function getAnalytics(){
-  try{
-    return JSON.parse(localStorage.getItem(ANALYTICS_KEY) || "null") || {
-      index:0, gallery:0, post:0, modal:0, search:0, tag:0, admin:0, last:null
-    };
-  }catch{
-    return { index:0, gallery:0, post:0, modal:0, search:0, tag:0, admin:0, last:null };
-  }
-}
-
-function bumpAnalytics(field){
-  const a = getAnalytics();
-  a[field] = (a[field] || 0) + 1;
-  a.last = new Date().toISOString();
-  localStorage.setItem(ANALYTICS_KEY, JSON.stringify(a));
-}
 
 /* ---------------- Utils ---------------- */
 
@@ -239,8 +219,6 @@ function updateActiveFiltersUI(){
 function setActiveTag(tag) {
   activeTag = tag;
 
-  if (activeTag) bumpAnalytics("tag");
-
   if (tagFilter && tagFilterText) {
     if (activeTag) {
       tagFilter.style.display = "flex";
@@ -370,8 +348,6 @@ function openModalFor(post) {
 
 function openModal(post) {
   currentModalPost = post;
-
-  bumpAnalytics("modal");
 
   modal?.classList.add("show");
   modal?.setAttribute("aria-hidden", "false");
@@ -657,9 +633,7 @@ if(searchInput){
   ensureAutocomplete();
 
   searchInput.addEventListener("input", () => {
-    const before = searchQuery;
     searchQuery = searchInput.value.trim();
-    if(!before && searchQuery) bumpAnalytics("search");
     if(searchClear) searchClear.style.display = searchQuery ? "inline-flex" : "none";
     render();
     updateActiveFiltersUI();
@@ -769,11 +743,6 @@ function loadPosts() {
   }
 
   setTheme(localStorage.getItem("mb_theme") === "dark");
-
-  // analytics: page visit
-  const path = (window.location.pathname || "").toLowerCase();
-  if (path.endsWith("gallery.html")) bumpAnalytics("gallery");
-  else bumpAnalytics("index");
   render();
   updateActiveFiltersUI();
 }
