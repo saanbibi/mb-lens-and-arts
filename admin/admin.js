@@ -1,536 +1,679 @@
-/* MB Lens & Arts — Admin (static/local)
-   NOTE: This is client-side only. It's good for "hidden" editing,
-   but it's not real security.
-*/
+// MB CMS Admin (LocalStorage-based)
+// Password is fixed by request.
+(() => {
+  "use strict";
 
-const STORAGE_KEY = "mb_posts";
-const SECRET_PARAM = "mbcms";
-const SESSION_KEY = "mb_admin_session";
+  const STORAGE_KEY = "mb_posts";
+  const VIEWS_KEY = "mb_views"; // { [id]: number }
+  const PASSWORD = "mb10201944";
+  const AUTH_KEY = "mb_admin_authed"; // sessionStorage flag
 
-// Fixed password (your request)
-const ADMIN_PASSWORD = "mb10201944";
+  // --------- DOM ---------
+  const gate = document.getElementById("gate");
+  const app = document.getElementById("app");
 
-// Elements
-const gateEl = document.getElementById("gate");
-const loginEl = document.getElementById("login");
-const appEl = document.getElementById("app");
+  const pw = document.getElementById("pw");
+  const loginBtn = document.getElementById("loginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
 
-const pwEl = document.getElementById("pw");
-const loginBtn = document.getElementById("loginBtn");
-const loginHint = document.getElementById("loginHint");
-const logoutBtn = document.getElementById("logoutBtn");
+  const toggleThemeBtn = document.getElementById("toggleThemeBtn"); // gate
+  const themeToggle = document.getElementById("themeToggle"); // app
 
-const themeToggle = document.getElementById("themeToggle");
+  const drop = document.getElementById("drop");
+  const fileInput = document.getElementById("file");
+  const preview = document.getElementById("preview");
 
-const dropEl = document.getElementById("drop");
-const fileEl = document.getElementById("file");
+  const formTitle = document.getElementById("formTitle");
+  const titleEl = document.getElementById("title");
+  const categoryEl = document.getElementById("category");
+  const captionEl = document.getElementById("caption");
+  const tagsEl = document.getElementById("tags");
+  const scheduleEl = document.getElementById("schedule");
+  const featuredEl = document.getElementById("featured");
+  const draftEl = document.getElementById("draft");
 
-const editorTitle = document.getElementById("editorTitle");
-const editId = document.getElementById("editId");
-const titleEl = document.getElementById("title");
-const captionEl = document.getElementById("caption");
-const categoryEl = document.getElementById("category");
-const scheduleEl = document.getElementById("schedule");
-const tagsEl = document.getElementById("tags");
+  const saveBtn = document.getElementById("saveBtn");
+  const cancelBtn = document.getElementById("cancelBtn");
 
-const pillFeatured = document.getElementById("pillFeatured");
-const pillDraft = document.getElementById("pillDraft");
+  const postsWrap = document.getElementById("posts");
+  const draftsWrap = document.getElementById("drafts");
 
-const saveBtn = document.getElementById("saveBtn");
-const resetBtn = document.getElementById("resetBtn");
-const deleteBtn = document.getElementById("deleteBtn");
-const statusEl = document.getElementById("status");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const wipeBtn = document.getElementById("wipeBtn");
 
-const postsEl = document.getElementById("posts");
-const exportBtn = document.getElementById("exportBtn");
-const wipeBtn = document.getElementById("wipeBtn");
+  const exportBtn = document.getElementById("exportJson");
+  const importInput = document.getElementById("importJson");
+  const clearAllBtn = document.getElementById("clearAllPosts");
 
-// Analytics
-const countTotal = document.getElementById("countTotal");
-const countPhoto = document.getElementById("countPhoto");
-const countArt = document.getElementById("countArt");
-const countFeatured = document.getElementById("countFeatured");
-const countDraft = document.getElementById("countDraft");
-const countScheduled = document.getElementById("countScheduled");
+  const toast = document.getElementById("toast");
 
-// State
-let posts = [];
-let editingId = null;
-let currentImage = "";
-let featured = false;
-let draft = false;
+  // analytics
+  const statTotal = document.getElementById("statTotal");
+  const statPhoto = document.getElementById("statPhoto");
+  const statArt = document.getElementById("statArt");
+  const statFeatured = document.getElementById("statFeatured");
+  const statDrafts = document.getElementById("statDrafts");
+  const statViews = document.getElementById("statViews");
+  const topViews = document.getElementById("topViews");
 
-/* ---------------- Theme ---------------- */
-function setTheme(isDark) {
-  document.body.classList.toggle("dark", isDark);
-  localStorage.setItem("mb_theme", isDark ? "dark" : "light");
-  if (themeToggle) themeToggle.textContent = isDark ? "Light" : "Dark";
-}
+  // --------- State ---------
+  let posts = [];
+  let editingId = null;
+  let currentImageDataUrl = ""; // base64
 
-/* ---------------- Access gate ---------------- */
-function hasSecretParam() {
-  try {
-    const u = new URL(window.location.href);
-    return u.searchParams.has(SECRET_PARAM);
-  } catch {
-    return false;
-  }
-}
-
-function showGate() {
-  if (gateEl) gateEl.style.display = "block";
-  if (loginEl) loginEl.style.display = "none";
-  if (appEl) appEl.style.display = "none";
-}
-
-function showLogin() {
-  if (gateEl) gateEl.style.display = "none";
-  if (loginEl) loginEl.style.display = "block";
-  if (appEl) appEl.style.display = "none";
-  if (pwEl) pwEl.focus();
-}
-
-function showApp() {
-  if (gateEl) gateEl.style.display = "none";
-  if (loginEl) loginEl.style.display = "none";
-  if (appEl) appEl.style.display = "block";
-}
-
-function isLoggedIn() {
-  return sessionStorage.getItem(SESSION_KEY) === "1";
-}
-
-function login() {
-  const entered = String(pwEl?.value || "");
-  if (entered === ADMIN_PASSWORD) {
-    sessionStorage.setItem(SESSION_KEY, "1");
-    if (loginHint) loginHint.textContent = "";
-    showApp();
-    initApp();
-  } else {
-    if (loginHint) loginHint.textContent = "Wrong password.";
-  }
-}
-
-function logout() {
-  sessionStorage.removeItem(SESSION_KEY);
-  showLogin();
-}
-
-function checkAccessAndBoot() {
-  if (!hasSecretParam()) {
-    showGate();
-    return;
+  // --------- Helpers ---------
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
   }
 
-  // If already logged in, go straight to app
-  if (isLoggedIn()) {
-    showApp();
-    initApp();
-  } else {
-    showLogin();
+  function showToast(msg = "Done") {
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.classList.add("show");
+    window.clearTimeout(showToast._t);
+    showToast._t = window.setTimeout(() => toast.classList.remove("show"), 1400);
   }
-}
 
-/* ---------------- Storage ---------------- */
-function loadPosts() {
-  try {
-    posts = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    if (!Array.isArray(posts)) posts = [];
-  } catch {
-    posts = [];
+  function loadPosts() {
+    try {
+      posts = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      if (!Array.isArray(posts)) posts = [];
+    } catch {
+      posts = [];
+    }
   }
-}
 
-function savePosts() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-}
-
-/* ---------------- Helpers ---------------- */
-function nowISO() {
-  return new Date().toISOString();
-}
-
-function makeId() {
-  return "p_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
-}
-
-function normalizeTags(str) {
-  const raw = String(str || "").trim();
-  if (!raw) return [];
-  return raw
-    .split(/\s+/)
-    .map(t => t.trim())
-    .filter(Boolean)
-    .map(t => (t.startsWith("#") ? t : `#${t}`));
-}
-
-function setStatus(msg) {
-  if (!statusEl) return;
-  statusEl.textContent = msg;
-  if (!msg) return;
-  setTimeout(() => {
-    if (statusEl.textContent === msg) statusEl.textContent = "";
-  }, 1800);
-}
-
-function fileToDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ""));
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-}
-
-/* ---------------- UI state ---------------- */
-function resetEditor() {
-  editingId = null;
-  currentImage = "";
-  featured = false;
-  draft = false;
-
-  if (editorTitle) editorTitle.textContent = "Create post";
-  if (editId) editId.textContent = "";
-
-  if (titleEl) titleEl.value = "";
-  if (captionEl) captionEl.value = "";
-  if (tagsEl) tagsEl.value = "";
-  if (scheduleEl) scheduleEl.value = "";
-  if (categoryEl) categoryEl.value = "Photography";
-
-  pillFeatured?.classList.remove("on");
-  pillDraft?.classList.remove("on");
-
-  if (deleteBtn) deleteBtn.style.display = "none";
-
-  if (dropEl) {
-    dropEl.innerHTML = `<b>Drop image</b> or click to upload<small>JPG/PNG/WebP recommended</small>`;
+  function savePosts() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
   }
-}
 
-function fillEditor(post) {
-  editingId = post.id;
-  currentImage = post.image || "";
-  featured = !!post.featured;
-  draft = !!post.draft;
+  function normalizeTags(str) {
+    const raw = String(str || "").trim();
+    if (!raw) return [];
+    return raw
+      .split(/\s+/)
+      .map(t => t.trim())
+      .filter(Boolean)
+      .map(t => (t.startsWith("#") ? t : `#${t}`));
+  }
 
-  if (editorTitle) editorTitle.textContent = "Edit post";
-  if (editId) editId.textContent = `ID: ${post.id}`;
+  function readViewsMap() {
+    try {
+      const obj = JSON.parse(localStorage.getItem(VIEWS_KEY) || "{}");
+      return obj && typeof obj === "object" ? obj : {};
+    } catch {
+      return {};
+    }
+  }
 
-  if (titleEl) titleEl.value = post.title || "";
-  if (captionEl) captionEl.value = post.caption || "";
-  if (tagsEl) tagsEl.value = (post.tags || []).join(" ");
-  if (categoryEl) categoryEl.value = post.category || "Photography";
+  function getViewCount(id) {
+    const map = readViewsMap();
+    return Number(map?.[id] || 0) || 0;
+  }
 
-  if (scheduleEl) {
-    // Try to convert ISO to datetime-local
-    if (post.schedule) {
-      const d = new Date(post.schedule);
-      if (!Number.isNaN(d.getTime())) {
-        const pad = n => String(n).padStart(2, "0");
-        const local = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        scheduleEl.value = local;
-      } else {
-        scheduleEl.value = "";
-      }
+  function formatWhen(dt) {
+    if (!dt) return "";
+    const d = new Date(dt);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString();
+  }
+
+  function newId() {
+    // short-ish stable id
+    return "p_" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+  }
+
+  async function compressImageToDataUrl(file, maxW = 2200, quality = 0.82) {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxW / bitmap.width);
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, w, h);
+
+    // Prefer webp; fallback jpeg if needed
+    let dataUrl = "";
+    try {
+      dataUrl = canvas.toDataURL("image/webp", quality);
+      if (!dataUrl.startsWith("data:image/webp")) throw new Error("webp not supported");
+    } catch {
+      dataUrl = canvas.toDataURL("image/jpeg", quality);
+    }
+    return dataUrl;
+  }
+
+  // --------- Theme ---------
+  function setTheme(isDark) {
+    document.body.classList.toggle("dark", isDark);
+    localStorage.setItem("mb_theme", isDark ? "dark" : "light");
+
+    if (themeToggle) themeToggle.textContent = isDark ? "Light" : "Dark";
+    if (toggleThemeBtn) toggleThemeBtn.textContent = isDark ? "Light" : "Dark";
+  }
+
+  // --------- Auth gate ---------
+  function isAuthed() {
+    return sessionStorage.getItem(AUTH_KEY) === "1";
+  }
+
+  function setAuthed(v) {
+    if (v) sessionStorage.setItem(AUTH_KEY, "1");
+    else sessionStorage.removeItem(AUTH_KEY);
+  }
+
+  function showGate() {
+    if (gate) gate.classList.remove("hidden");
+    if (app) app.style.display = "none";
+    if (pw) pw.value = "";
+    pw?.focus?.();
+  }
+
+  function showApp() {
+    if (gate) gate.classList.add("hidden");
+    if (app) app.style.display = "block";
+  }
+
+  function tryLogin() {
+    const val = String(pw?.value || "");
+    if (val === PASSWORD) {
+      setAuthed(true);
+      showApp();
+      renderAll();
+      showToast("Logged in");
     } else {
-      scheduleEl.value = "";
+      showToast("Wrong password");
+      pw?.focus?.();
     }
   }
 
-  pillFeatured?.classList.toggle("on", featured);
-  pillDraft?.classList.toggle("on", draft);
+  function logout() {
+    setAuthed(false);
+    showGate();
+    showToast("Logged out");
+  }
 
-  if (deleteBtn) deleteBtn.style.display = "inline-flex";
+  // --------- Form ---------
+  function resetForm() {
+    editingId = null;
+    currentImageDataUrl = "";
+    formTitle.textContent = "Create post";
+    cancelBtn.style.display = "none";
 
-  if (dropEl) {
-    if (currentImage) {
-      dropEl.innerHTML = `<b>Image selected</b><small>Click to replace</small>`;
+    titleEl.value = "";
+    captionEl.value = "";
+    tagsEl.value = "";
+    scheduleEl.value = "";
+    featuredEl.checked = false;
+    draftEl.checked = false;
+    categoryEl.value = "Photography";
+
+    preview.style.display = "none";
+    preview.removeAttribute("src");
+  }
+
+  function fillForm(post) {
+    editingId = post.id;
+    currentImageDataUrl = post.image || "";
+    formTitle.textContent = "Edit post";
+    cancelBtn.style.display = "inline-flex";
+
+    titleEl.value = post.title || "";
+    captionEl.value = post.caption || "";
+    categoryEl.value = post.category || "Photography";
+    tagsEl.value = normalizeTags(post.tags).join(" ");
+    scheduleEl.value = post.schedule ? toDatetimeLocal(post.schedule) : "";
+    featuredEl.checked = !!post.featured;
+    draftEl.checked = !!post.draft;
+
+    if (currentImageDataUrl) {
+      preview.src = currentImageDataUrl;
+      preview.style.display = "block";
+    } else {
+      preview.style.display = "none";
     }
-  }
-}
-
-/* ---------------- Render posts list ---------------- */
-function renderPosts() {
-  if (!postsEl) return;
-
-  postsEl.innerHTML = "";
-
-  posts.forEach((p, idx) => {
-    const row = document.createElement("div");
-    row.className = "post-item";
-    row.draggable = true;
-    row.dataset.id = p.id;
-
-    const img = document.createElement("img");
-    img.className = "thumb";
-    img.alt = "thumb";
-    img.src = p.image || "";
-
-    const meta = document.createElement("div");
-    meta.className = "post-meta";
-
-    const title = document.createElement("b");
-    title.textContent = p.title || "(untitled)";
-
-    const sub = document.createElement("span");
-    const tags = Array.isArray(p.tags) ? p.tags.slice(0, 3).join(" ") : "";
-    const flags = [p.category, p.featured ? "Featured" : "", p.draft ? "Draft" : ""].filter(Boolean).join(" • ");
-    sub.textContent = `${flags}${tags ? " • " + tags : ""}`;
-
-    meta.appendChild(title);
-    meta.appendChild(sub);
-
-    row.appendChild(img);
-    row.appendChild(meta);
-
-    row.addEventListener("click", () => fillEditor(p));
-
-    // Drag reorder
-    row.addEventListener("dragstart", (e) => {
-      e.dataTransfer?.setData("text/plain", p.id);
-      row.style.opacity = "0.6";
-    });
-    row.addEventListener("dragend", () => {
-      row.style.opacity = "1";
-    });
-    row.addEventListener("dragover", (e) => {
-      e.preventDefault();
-    });
-    row.addEventListener("drop", (e) => {
-      e.preventDefault();
-      const fromId = e.dataTransfer?.getData("text/plain");
-      const toId = row.dataset.id;
-      if (!fromId || !toId || fromId === toId) return;
-
-      const fromIndex = posts.findIndex(x => x.id === fromId);
-      const toIndex = posts.findIndex(x => x.id === toId);
-      if (fromIndex < 0 || toIndex < 0) return;
-
-      const [moved] = posts.splice(fromIndex, 1);
-      posts.splice(toIndex, 0, moved);
-
-      savePosts();
-      renderPosts();
-      renderAnalytics();
-      setStatus("Reordered");
-    });
-
-    postsEl.appendChild(row);
-  });
-}
-
-/* ---------------- Analytics ---------------- */
-function renderAnalytics() {
-  const total = posts.length;
-  const photo = posts.filter(p => p.category === "Photography").length;
-  const art = posts.filter(p => p.category === "Art").length;
-  const feat = posts.filter(p => !!p.featured).length;
-  const drafts = posts.filter(p => !!p.draft).length;
-  const scheduled = posts.filter(p => {
-    if (!p.schedule) return false;
-    const d = new Date(p.schedule);
-    return !Number.isNaN(d.getTime()) && d > new Date();
-  }).length;
-
-  if (countTotal) countTotal.textContent = String(total);
-  if (countPhoto) countPhoto.textContent = String(photo);
-  if (countArt) countArt.textContent = String(art);
-  if (countFeatured) countFeatured.textContent = String(feat);
-  if (countDraft) countDraft.textContent = String(drafts);
-  if (countScheduled) countScheduled.textContent = String(scheduled);
-}
-
-/* ---------------- Actions ---------------- */
-async function handleFile(file) {
-  if (!file) return;
-  if (!file.type.startsWith("image/")) {
-    setStatus("Please upload an image file.");
-    return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  try {
-    currentImage = await fileToDataURL(file);
-    if (dropEl) dropEl.innerHTML = `<b>Image selected</b><small>Click to replace</small>`;
-    setStatus("Image loaded");
-  } catch {
-    setStatus("Failed to read image");
-  }
-}
-
-function savePost() {
-  if (!currentImage) {
-    setStatus("Please upload an image first.");
-    return;
+  function toDatetimeLocal(value) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    // convert to local datetime-local string: YYYY-MM-DDTHH:MM
+    const pad = (n) => String(n).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
   }
 
-  const title = String(titleEl?.value || "").trim();
-  const caption = String(captionEl?.value || "").trim();
-  const category = String(categoryEl?.value || "Photography");
-  const tags = normalizeTags(tagsEl?.value || "");
-
-  // schedule (datetime-local) -> ISO
-  let schedule = "";
-  const rawSched = String(scheduleEl?.value || "").trim();
-  if (rawSched) {
-    const d = new Date(rawSched);
-    if (!Number.isNaN(d.getTime())) schedule = d.toISOString();
+  function fromDatetimeLocal(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toISOString();
   }
 
-  if (editingId) {
-    const idx = posts.findIndex(p => p.id === editingId);
-    if (idx >= 0) {
-      posts[idx] = {
-        ...posts[idx],
-        title,
-        caption,
-        category,
-        tags,
-        schedule,
-        featured,
-        draft,
-        image: currentImage,
-        updatedAt: nowISO(),
-      };
-      savePosts();
-      renderPosts();
-      renderAnalytics();
-      setStatus("Updated");
+  function validatePost() {
+    const t = String(titleEl.value || "").trim();
+    const c = String(captionEl.value || "").trim();
+    const cat = categoryEl.value;
+    if (!currentImageDataUrl) return "Please upload an image.";
+    if (!t && !c) return "Add at least a title or caption.";
+    if (!cat) return "Pick a category.";
+    return "";
+  }
+
+  function upsertPost() {
+    const err = validatePost();
+    if (err) {
+      showToast(err);
       return;
     }
+
+    const nowIso = new Date().toISOString();
+    const post = {
+      id: editingId || newId(),
+      image: currentImageDataUrl,
+      title: String(titleEl.value || "").trim(),
+      caption: String(captionEl.value || "").trim(),
+      category: categoryEl.value || "Photography",
+      tags: normalizeTags(tagsEl.value),
+      featured: !!featuredEl.checked,
+      draft: !!draftEl.checked,
+      schedule: fromDatetimeLocal(scheduleEl.value),
+      updatedAt: nowIso,
+      createdAt: editingId ? undefined : nowIso
+    };
+
+    if (editingId) {
+      const idx = posts.findIndex(p => p.id === editingId);
+      if (idx >= 0) {
+        // preserve createdAt if exists
+        post.createdAt = posts[idx].createdAt || post.createdAt || nowIso;
+        posts[idx] = { ...posts[idx], ...post };
+      }
+    } else {
+      posts.unshift(post);
+    }
+
+    savePosts();
+    renderAll();
+    resetForm();
+    showToast("Saved");
   }
 
-  // create new
-  const post = {
-    id: makeId(),
-    title,
-    caption,
-    category,
-    tags,
-    schedule,
-    featured,
-    draft,
-    image: currentImage,
-    createdAt: nowISO(),
-    updatedAt: nowISO(),
-  };
+  // --------- Rendering ---------
+  function renderAnalytics() {
+    if (!statTotal) return;
 
-  // Add to top by default
-  posts.unshift(post);
+    const total = posts.length;
+    const photo = posts.filter(p => p.category === "Photography").length;
+    const art = posts.filter(p => p.category === "Art").length;
+    const featured = posts.filter(p => !!p.featured).length;
+    const drafts = posts.filter(p => !!p.draft).length;
 
-  savePosts();
-  renderPosts();
-  renderAnalytics();
-  setStatus("Published");
-  resetEditor();
-}
+    const viewsMap = readViewsMap();
+    const totalViews = Object.values(viewsMap).reduce((a, b) => a + (Number(b) || 0), 0);
 
-function deletePost() {
-  if (!editingId) return;
-  const idx = posts.findIndex(p => p.id === editingId);
-  if (idx < 0) return;
-  const ok = confirm("Delete this post?");
-  if (!ok) return;
-  posts.splice(idx, 1);
-  savePosts();
-  renderPosts();
-  renderAnalytics();
-  setStatus("Deleted");
-  resetEditor();
-}
+    statTotal.textContent = String(total);
+    statPhoto.textContent = String(photo);
+    statArt.textContent = String(art);
+    statFeatured.textContent = String(featured);
+    statDrafts.textContent = String(drafts);
+    statViews.textContent = String(totalViews);
 
-function exportJSON() {
-  const data = JSON.stringify(posts, null, 2);
-  const blob = new Blob([data], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "mb_posts_backup.json";
-  a.click();
-  URL.revokeObjectURL(url);
-}
+    // Top viewed list
+    if (topViews) {
+      const byViews = posts
+        .map(p => ({ p, v: Number(viewsMap?.[p.id] || 0) || 0 }))
+        .filter(x => x.v > 0)
+        .sort((a, b) => b.v - a.v)
+        .slice(0, 6);
 
-function wipeAll() {
-  const ok = confirm("Wipe ALL posts from this browser? This cannot be undone.");
-  if (!ok) return;
-  posts = [];
-  savePosts();
-  renderPosts();
-  renderAnalytics();
-  resetEditor();
-  setStatus("Wiped");
-}
+      if (byViews.length === 0) {
+        topViews.innerHTML = `<div class="mini">No views yet (views are stored per-device in localStorage).</div>`;
+      } else {
+        topViews.innerHTML = byViews
+          .map(({ p, v }) => `
+            <div class="post-row" style="margin-top:8px;">
+              <div style="min-width:0;">
+                <div style="font-weight:950; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(p.title || "(untitled)")}</div>
+                <div class="mini">${escapeHtml(p.category || "")}${p.draft ? " • Draft" : ""}${p.schedule ? " • Scheduled" : ""}</div>
+              </div>
+              <div class="pill">${v} views</div>
+            </div>
+          `)
+          .join("");
+      }
+    }
+  }
 
-/* ---------------- Init app ---------------- */
-let appInitialized = false;
-function initApp() {
-  if (appInitialized) return;
-  appInitialized = true;
+  function renderLists() {
+    if (!postsWrap || !draftsWrap) return;
 
-  // Theme
-  setTheme(localStorage.getItem("mb_theme") === "dark");
-  themeToggle?.addEventListener("click", () => {
-    setTheme(!document.body.classList.contains("dark"));
-  });
+    const drafts = posts.filter(p => !!p.draft);
+    const published = posts.filter(p => !p.draft);
 
-  // Logout
-  logoutBtn?.addEventListener("click", logout);
+    draftsWrap.innerHTML = drafts.length
+      ? drafts.map(p => renderPostRow(p, { inDrafts: true })).join("")
+      : `<div class="mini">No drafts yet.</div>`;
 
-  // Drop zone
-  dropEl?.addEventListener("click", () => fileEl?.click());
-  dropEl?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") fileEl?.click();
-  });
+    postsWrap.innerHTML = published.length
+      ? published.map(p => renderPostRow(p, { inDrafts: false })).join("")
+      : `<div class="mini">No published posts yet.</div>`;
 
-  dropEl?.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    dropEl.classList.add("drag");
-  });
-  dropEl?.addEventListener("dragleave", () => dropEl.classList.remove("drag"));
-  dropEl?.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dropEl.classList.remove("drag");
-    const f = e.dataTransfer?.files?.[0];
-    if (f) handleFile(f);
-  });
+    // attach handlers + drag
+    attachRowHandlers();
+    enableDragReorder();
+  }
 
-  fileEl?.addEventListener("change", () => {
-    const f = fileEl.files?.[0];
-    if (f) handleFile(f);
-    if (fileEl) fileEl.value = "";
-  });
+  function renderPostRow(p, { inDrafts }) {
+    const tags = Array.isArray(p.tags) ? p.tags : [];
+    const views = getViewCount(p.id);
+    const when = p.schedule ? `Scheduled: ${escapeHtml(formatWhen(p.schedule))}` : "";
+    const badge = p.featured ? `<span class="pill">Featured</span>` : "";
+    const badge2 = p.draft ? `<span class="pill">Draft</span>` : "";
+    const badge3 = views ? `<span class="pill">${views} views</span>` : "";
 
-  // Pills
-  pillFeatured?.addEventListener("click", () => {
-    featured = !featured;
-    pillFeatured.classList.toggle("on", featured);
-  });
-  pillDraft?.addEventListener("click", () => {
-    draft = !draft;
-    pillDraft.classList.toggle("on", draft);
-  });
+    return `
+      <div class="post-row" draggable="true" data-id="${escapeHtml(p.id)}" data-draft="${p.draft ? "1" : "0"}">
+        <div style="display:flex; gap:10px; min-width:0;">
+          <img src="${escapeHtml(p.image || "")}" alt="" style="width:72px; height:72px; border-radius:14px; object-fit:cover; background: rgba(15,23,42,.06);" loading="lazy" decoding="async">
+          <div style="min-width:0;">
+            <div style="font-weight:950; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(p.title || "(untitled)")}</div>
+            <div class="mini">${escapeHtml(p.category || "")}${tags.length ? " • " + escapeHtml(tags.slice(0, 4).join(" ")) : ""}</div>
+            ${when ? `<div class="mini">${when}</div>` : ""}
+            <div class="row" style="margin-top:8px;">
+              ${badge}${badge2}${badge3}
+            </div>
+          </div>
+        </div>
 
-  // Buttons
-  saveBtn?.addEventListener("click", savePost);
-  resetBtn?.addEventListener("click", resetEditor);
-  deleteBtn?.addEventListener("click", deletePost);
+        <div class="row" style="justify-content:flex-end;">
+          <button class="btn2" data-act="edit" data-id="${escapeHtml(p.id)}" type="button">Edit</button>
+          <button class="btn2" data-act="open" data-id="${escapeHtml(p.id)}" type="button">Open</button>
+          ${p.draft ? `<button class="btn2" data-act="preview" data-id="${escapeHtml(p.id)}" type="button">Preview link</button>` : ``}
+          <button class="btn2 danger" data-act="del" data-id="${escapeHtml(p.id)}" type="button">Delete</button>
+        </div>
+      </div>
+    `;
+  }
 
-  exportBtn?.addEventListener("click", exportJSON);
-  wipeBtn?.addEventListener("click", wipeAll);
+  function attachRowHandlers() {
+    const buttons = document.querySelectorAll("[data-act][data-id]");
+    buttons.forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const act = btn.getAttribute("data-act");
+        const id = btn.getAttribute("data-id");
+        const post = posts.find(p => p.id === id);
+        if (!post) return;
 
-  // Load + render
-  loadPosts();
-  resetEditor();
-  renderPosts();
-  renderAnalytics();
-}
+        if (act === "edit") {
+          fillForm(post);
+        }
 
-/* ---------------- Login events ---------------- */
-loginBtn?.addEventListener("click", login);
-pwEl?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") login();
-});
+        if (act === "open") {
+          window.location.href = `../post.html?id=${encodeURIComponent(id)}`;
+        }
 
-// Boot
-checkAccessAndBoot();
+        if (act === "preview") {
+          // private preview link: embeds post data in hash, works for anyone with the link
+          const payload = b64UrlEncode(JSON.stringify(stripForPreview(post)));
+          const url = `${location.origin}${location.pathname.replace(/\/admin\/admin\.html.*$/,"/post.html")}?preview=1#p=${payload}`;
+          try {
+            await navigator.clipboard.writeText(url);
+            showToast("Preview link copied");
+          } catch {
+            prompt("Copy this preview link:", url);
+          }
+        }
+
+        if (act === "del") {
+          const ok = confirm("Delete this post? This cannot be undone.");
+          if (!ok) return;
+          posts = posts.filter(p => p.id !== id);
+          savePosts();
+          renderAll();
+          showToast("Deleted");
+        }
+      });
+    });
+  }
+
+  function stripForPreview(post) {
+    return {
+      id: post.id,
+      image: post.image,
+      title: post.title,
+      caption: post.caption,
+      category: post.category,
+      tags: Array.isArray(post.tags) ? post.tags : [],
+      featured: !!post.featured,
+      draft: !!post.draft,
+      schedule: post.schedule || ""
+    };
+  }
+
+  // base64url helpers
+  function b64UrlEncode(str) {
+    const b64 = btoa(unescape(encodeURIComponent(str)));
+    return b64.replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  }
+
+  // --------- Drag reorder (published + drafts independently) ---------
+  let dragId = null;
+  function enableDragReorder() {
+    document.querySelectorAll(".post-row[draggable='true']").forEach(row => {
+      row.addEventListener("dragstart", (e) => {
+        dragId = row.dataset.id;
+        row.style.opacity = "0.6";
+        e.dataTransfer.effectAllowed = "move";
+      });
+      row.addEventListener("dragend", () => {
+        row.style.opacity = "1";
+      });
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      });
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const targetId = row.dataset.id;
+        if (!dragId || dragId === targetId) return;
+
+        // reorder within same bucket (draft vs published) to match your UI lists
+        const dragged = posts.find(p => p.id === dragId);
+        const target = posts.find(p => p.id === targetId);
+        if (!dragged || !target) return;
+        if (!!dragged.draft !== !!target.draft) return; // prevent cross-list reorder
+
+        const bucketIds = posts.filter(p => !!p.draft === !!dragged.draft).map(p => p.id);
+        const from = bucketIds.indexOf(dragId);
+        const to = bucketIds.indexOf(targetId);
+        if (from < 0 || to < 0) return;
+
+        bucketIds.splice(to, 0, bucketIds.splice(from, 1)[0]);
+
+        // rebuild posts keeping other bucket order stable
+        const other = posts.filter(p => !!p.draft !== !!dragged.draft);
+        const bucket = bucketIds.map(id => posts.find(p => p.id === id)).filter(Boolean);
+        posts = [...bucket, ...other];
+
+        savePosts();
+        renderAll();
+      });
+    });
+  }
+
+  // --------- Backup / Restore ---------
+  function exportJson() {
+    const blob = new Blob([JSON.stringify(posts, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "mb_posts_backup.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast("Exported");
+  }
+
+  async function importJson(file) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) throw new Error("Invalid JSON: expected array");
+      posts = data;
+      savePosts();
+      renderAll();
+      showToast("Imported");
+    } catch (e) {
+      showToast("Import failed");
+      console.error(e);
+    }
+  }
+
+  // --------- Image drop/upload ---------
+  function setupDrop() {
+    if (!drop || !fileInput) return;
+
+    drop.addEventListener("click", () => fileInput.click());
+
+    drop.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      drop.classList.add("drag");
+    });
+
+    drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+
+    drop.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      drop.classList.remove("drag");
+      const file = e.dataTransfer.files?.[0];
+      if (file) await handleFile(file);
+    });
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (file) await handleFile(file);
+      fileInput.value = "";
+    });
+  }
+
+  async function handleFile(file) {
+    if (!file.type.startsWith("image/")) {
+      showToast("Please upload an image file");
+      return;
+    }
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      currentImageDataUrl = dataUrl;
+
+      preview.src = dataUrl;
+      preview.style.display = "block";
+      showToast("Image added");
+    } catch (e) {
+      console.error(e);
+      showToast("Image load failed");
+    }
+  }
+
+  // --------- Render all ---------
+  function renderAll() {
+    renderAnalytics();
+    renderLists();
+  }
+
+  // --------- Events ---------
+  function wireEvents() {
+    loginBtn?.addEventListener("click", tryLogin);
+    pw?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") tryLogin();
+    });
+
+    logoutBtn?.addEventListener("click", logout);
+
+    toggleThemeBtn?.addEventListener("click", () => setTheme(!document.body.classList.contains("dark")));
+    themeToggle?.addEventListener("click", () => setTheme(!document.body.classList.contains("dark")));
+
+    saveBtn?.addEventListener("click", upsertPost);
+    cancelBtn?.addEventListener("click", () => {
+      resetForm();
+      showToast("Canceled");
+    });
+
+    refreshBtn?.addEventListener("click", () => {
+      loadPosts();
+      renderAll();
+      showToast("Refreshed");
+    });
+
+    wipeBtn?.addEventListener("click", () => {
+      const ok = confirm("Wipe all posts? This will clear localStorage posts.");
+      if (!ok) return;
+      posts = [];
+      savePosts();
+      renderAll();
+      resetForm();
+      showToast("Wiped");
+    });
+
+    exportBtn?.addEventListener("click", exportJson);
+    importInput?.addEventListener("change", async () => {
+      const file = importInput.files?.[0];
+      if (file) await importJson(file);
+      importInput.value = "";
+    });
+
+    clearAllBtn?.addEventListener("click", () => {
+      const ok = confirm("Clear all posts? This cannot be undone.");
+      if (!ok) return;
+      posts = [];
+      savePosts();
+      renderAll();
+      resetForm();
+      showToast("Cleared");
+    });
+
+    // Admin shortcut (Ctrl+Shift+A) stays consistent
+    document.addEventListener("keydown", (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
+        // already here
+      }
+    });
+  }
+
+  // --------- Init ---------
+  function init() {
+    // restore theme
+    setTheme(localStorage.getItem("mb_theme") === "dark");
+
+    loadPosts();
+    setupDrop();
+    wireEvents();
+
+    if (isAuthed()) {
+      showApp();
+      renderAll();
+    } else {
+      showGate();
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
