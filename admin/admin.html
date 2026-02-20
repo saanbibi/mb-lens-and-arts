@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MB CMS</title>
+
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    .cms-wrap{ width:min(1100px,92vw); margin: 0 auto; padding: 36px 0 60px; }
+    .cms-top{ display:flex; align-items:center; justify-content:space-between; gap:14px; }
+    .cms-top h1{ margin:0; font-size: 22px; }
+    .cms-sub{ margin:6px 0 0; color: var(--muted); font-size: 13px; }
+
+    .cms-grid{ margin-top: 18px; display:grid; grid-template-columns: 420px 1fr; gap: 14px; }
+    @media (max-width: 980px){ .cms-grid{ grid-template-columns: 1fr; } }
+
+    .panel{ padding: 16px; }
+    .field{ display:flex; flex-direction:column; gap:8px; margin-top: 12px; }
+    .field label{ font-weight: 900; font-size: 12px; color: var(--muted); letter-spacing:.2px; }
+    .input, .select, .textarea{
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.92);
+      border-radius: 14px;
+      padding: 10px 12px;
+      font: inherit;
+      outline: none;
+      box-shadow: var(--shadow2);
+    }
+    .textarea{ min-height: 120px; resize: vertical; }
+
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top: 12px; }
+    .pill{
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.85);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 800;
+      font-size: 12px;
+      cursor:pointer;
+      box-shadow: var(--shadow2);
+      user-select:none;
+    }
+    .pill.on{ background: rgba(15,23,42,.92); color:#fff; border-color: rgba(15,23,42,.18); }
+
+    .btn2{
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.92);
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-weight: 900;
+      cursor:pointer;
+      box-shadow: var(--shadow2);
+    }
+    .btn2.primary{ background: rgba(15,23,42,.92); color:#fff; border-color: rgba(15,23,42,.18); }
+    .btn2.danger{ background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.30); color: rgba(127,29,29,.95); }
+
+    .drop{
+      border: 2px dashed rgba(15,23,42,.15);
+      border-radius: 16px;
+      background: rgba(255,255,255,.75);
+      padding: 16px;
+      text-align:center;
+      cursor:pointer;
+      box-shadow: var(--shadow2);
+      transition: .15s;
+    }
+    .drop.drag{ background: rgba(99,102,241,.08); border-color: rgba(99,102,241,.35); }
+    .drop img{ width:100%; max-height: 260px; object-fit: cover; border-radius: 14px; display:block; }
+
+    .list{ padding: 16px; }
+    .list-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; }
+    .list-head h2{ margin:0; font-size: 16px; }
+    .list-sub{ margin:6px 0 0; color: var(--muted); font-size: 12px; }
+
+    .post{
+      display:flex;
+      gap: 12px;
+      align-items:flex-start;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.92);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: var(--shadow2);
+      margin-top: 12px;
+    }
+    .thumb{
+      width: 86px; height: 86px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(15,23,42,.04);
+      overflow:hidden;
+      flex: 0 0 auto;
+    }
+    .thumb img{ width:100%; height:100%; object-fit: cover; display:block; }
+    .meta{ flex:1; min-width: 0; }
+    .meta b{ display:block; font-size: 13px; }
+    .meta .small{ color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.35; }
+    .actions{ display:flex; gap: 8px; flex-wrap:wrap; justify-content:flex-end; }
+    .dragHandle{
+      cursor: grab;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.85);
+      border-radius: 12px;
+      padding: 10px 10px;
+      font-weight: 900;
+      box-shadow: var(--shadow2);
+      user-select:none;
+    }
+    .post.dragging{ opacity: .6; transform: scale(.99); }
+
+    /* Gate + Login */
+    .center-box{
+      width:min(520px, 92vw);
+      margin: 18vh auto 0;
+      padding: 18px;
+    }
+    .center-box h1{ margin:0; font-size: 20px; }
+    .center-box p{ margin: 8px 0 0; color: var(--muted); }
+  
+/* Stats row */
+.stats-row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.stats-row .stat{
+  border: 1px solid rgba(15,23,42,.10);
+  background: rgba(15,23,42,.04);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+  font-size: 12px;
+}
+</style>
+</head>
+
+<body>
+  <div id="gate" class="card center-box" style="display:none;">
+    <h1>Not found</h1>
+    <p>This page is hidden.</p>
+  </div>
+
+  <div id="login" class="card center-box" style="display:none;">
+    <h1>MB Create Post</h1>
+    <p class="cms-sub">Enter your password to continue.</p>
+
+    <div class="field">
+      <label>Password</label>
+      <input class="input" id="pw" type="password" placeholder="••••••••" />
+    </div>
+
+    <div class="row">
+      <button class="btn2 primary" id="loginBtn" type="button">Login</button>
+            <a class="btn2" href="../index.html">Back</a>
+    </div>
+
+    <p class="cms-sub">Admin access (local CMS).</p>
+  </div>
+
+  <main id="app" class="cms-wrap" style="display:none;">
+    <div class="cms-top">
+      <div>
+        <h1>MB Create Post</h1>
+        <p class="cms-sub">Photography + Art / Drawings</p>
+      </div>
+      <div class="row">
+        <a class="btn2" href="../index.html">Back</a>
+        <button class="btn2" id="logoutBtn" type="button">Logout</button>
+      </div>
+    </div>
+
+    <div class="cms-grid">
+      <!-- Editor -->
+      <section class="card panel">
+        <div class="list-head">
+          <div>
+            <h2 id="editorTitle">Create post</h2>
+            <p class="list-sub"></p>
+          </div>
+        </div>
+
+        <div id="drop" class="drop" tabindex="0">
+          Drop image here or click
+        </div>
+        <input id="file" type="file" accept="image/*" hidden />
+
+        <div class="field">
+          <label>Title</label>
+          <input class="input" id="title" type="text" placeholder="Optional title" />
+        </div>
+
+        <div class="field">
+          <label>Category</label>
+          <select class="select" id="category">
+            <option value="Photography">Photography</option>
+            <option value="Art">Art / Drawings</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Caption</label>
+          <textarea class="textarea" id="caption" placeholder="Write a caption..."></textarea>
+        </div>
+
+        <div class="field">
+          <label>Tags (space or comma separated)</label>
+          <input class="input" id="tags" type="text" placeholder="#sunset #street, #study" />
+        </div>
+
+        <div class="row">
+          <span class="pill" id="pillFeatured">Featured</span>
+          <span class="pill" id="pillDraft">Draft</span>
+        </div>
+
+        <div class="field">
+          <label>Schedule (optional)</label>
+          <input class="input" id="schedule" type="datetime-local" />
+          <div class="cms-sub">If set, post stays hidden until this date/time.</div>
+        </div>
+
+        <div class="row">
+          <button class="btn2 primary" id="saveBtn" type="button">Publish</button>
+          <button class="btn2" id="resetBtn" type="button">Reset</button>
+          <button class="btn2 danger" id="deleteBtn" type="button" style="display:none;">Delete</button>
+        </div>
+
+        <div class="cms-sub" id="status"></div>
+      </section>
+
+      <!-- Posts -->
+      <section class="card list">
+        <div class="list-head">
+          <div>
+            <h2>Posts</h2>
+            <p class="list-sub">Drag to reorder the posts</p>
+          <div class="stats-row">
+            <div class="stat">Published Total: <b id="statTotal">0</b></div>
+            <div class="stat">Photography: <b id="statPhoto">0</b></div>
+            <div class="stat">Art / Drawings: <b id="statArt">0</b></div>
+          </div>
+          </div>
+          <div class="row">
+            <button class="btn2" id="exportBtn" type="button">Export</button>
+            <button class="btn2 danger" id="wipeBtn" type="button">Wipe all</button>
+          </div>
+        </div>
+
+        <div id="posts"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="admin.js"></script>
+
+  <section class="card" style="padding:14px; margin-top:14px;">
+  <h3 style="margin:0 0 10px;">Backup / Restore</h3>
+
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <button class="action-btn" id="exportJson" type="button">Export JSON</button>
+
+    <label class="action-btn" style="display:inline-flex; align-items:center; gap:10px; cursor:pointer;">
+      Import JSON
+      <input id="importJson" type="file" accept="application/json" style="display:none;" />
+    </label>
+
+    <button class="action-btn" id="clearAllPosts" type="button">Clear all</button>
+  </div>
+
+  <p style="margin:10px 0 0; color:var(--muted); font-size:12px;">
+    Export saves your posts (including tags/captions/schedules). Import replaces current data.
+  </p>
+</section>
+
+</body>
+</html>

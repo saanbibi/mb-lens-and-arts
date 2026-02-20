@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MB — Whole Gallery</title>
+  <meta name="description" content="MB Lens & Arts — Whole Gallery" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body data-page="gallery">
+  <!-- Top bar -->
+  <header class="post-topbar">
+    <div class="container post-topbar-inner">
+      <a class="post-back" href="index.html#gallery">← Back</a>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="footer-btn" id="themeToggle" type="button">Dark</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Gallery only -->
+  <section class="section" id="gallery">
+    <div class="container section-head gallery-head">
+      <div>
+        <h2 class="section-title">Whole Gallery</h2>
+        <p class="section-sub">Photography + Art / Drawings</p>
+      </div>
+
+      <div class="filters-wrap">
+        <!-- Category filters row -->
+        <div class="filters" role="tablist" aria-label="Gallery filters">
+          <button class="filter-btn active" data-filter="all" role="tab" aria-selected="true">All</button>
+          <button class="filter-btn" data-filter="Photography" role="tab" aria-selected="false">Photography</button>
+          <button class="filter-btn" data-filter="Art" role="tab" aria-selected="false">Art / Drawings</button>
+
+          <!-- Current tag pill -->
+          <button class="tag-filter" id="tagFilter" type="button" style="display:none;">
+            <span id="tagFilterText">#tag</span>
+            <span class="x" id="tagFilterClose" aria-label="Clear tag">✕</span>
+          </button>
+        </div>
+
+        <!-- Search bar -->
+        <div class="search-row">
+          <div class="search">
+            <span class="search-ico">⌕</span>
+            <input
+              id="searchInput"
+              type="text"
+              placeholder="Search title/caption… or type #tag (ex: #cats)"
+              autocomplete="off"
+            />
+            <button class="search-clear" id="searchClear" type="button" aria-label="Clear search" style="display:none;">✕</button>
+          </div>
+        </div>
+
+        <!-- Active filter chips/card -->
+        <div class="active-filters" id="activeFilters" style="display:none;">
+          <div class="active-title">Active filters</div>
+          <div class="active-chips" id="activeChips"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="masonry" id="galleryGrid"></div>
+    </div>
+
+    <!-- Tag cloud moved to bottom -->
+    <div class="container">
+      <div class="tag-cloud bottom" id="tagCloud"></div>
+    </div>
+  </section>
+
+  <!-- Fullscreen modal (same as index) -->
+  <div class="modal" id="modal" aria-hidden="true">
+    <div class="modal-backdrop" id="modalBackdrop"></div>
+
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
+
+      <button class="modal-nav left" id="modalPrev" aria-label="Previous">‹</button>
+      <button class="modal-nav right" id="modalNext" aria-label="Next">›</button>
+
+      <div class="modal-media">
+        <img id="modalImage" alt="Preview" />
+      </div>
+
+      <div class="modal-info">
+        <div class="modal-top">
+          <h3 id="modalTitle"></h3>
+          <div class="modal-meta" id="modalMeta"></div>
+        </div>
+
+        <p id="modalCaption" class="modal-caption"></p>
+        <div id="modalTags" class="tag-row"></div>
+
+        <div class="modal-actions">
+          <button class="action-btn" id="copyCaptionBtn" type="button">Copy Caption</button>
+          <button class="action-btn" id="copyTagsBtn" type="button">Copy Tags</button>
+          <button class="action-btn" id="copyLinkBtn" type="button">Copy Link</button>
+          <a class="action-btn primary" id="openPostBtn" href="post.html" target="_self">Open Post</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
