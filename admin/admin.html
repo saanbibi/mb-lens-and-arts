@@ -7,212 +7,337 @@
   <meta name="robots" content="noindex,nofollow" />
   <link rel="stylesheet" href="../style.css" />
   <style>
-    /* Small admin-only helpers (keeps your global style.css clean) */
-    .center-box{ max-width: 520px; margin: 80px auto 0; }
-    .cms-wrap{ padding: 18px 0 60px; }
-    .cms-top{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
-    .cms-title{ font-size: 20px; font-weight: 950; margin:0; }
-    .cms-sub{ color: var(--muted); font-size: 13px; margin-top: 6px; }
+    /* Admin-only polish (kept minimal, matches your site variables) */
+    body{ padding-bottom: 32px; }
+    .admin-wrap{ padding: 22px 0 44px; }
+    .admin-top{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom: 12px; }
+    .admin-title{ margin:0; font-size: 22px; font-weight: 950; }
+    .admin-sub{ margin:6px 0 0; color: var(--muted); font-size: 13px; }
+    .grid2{ display:grid; grid-template-columns: 1.1fr .9fr; gap: 14px; }
+    @media (max-width: 980px){ .grid2{ grid-template-columns: 1fr; } }
 
-    .grid{ display:grid; grid-template-columns: 1.2fr .8fr; gap: 14px; }
-    @media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
-
-    .card{ background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow2); }
-    .card-pad{ padding: 14px; }
-
-    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .btn2{ border: 1px solid var(--border); background: rgba(255,255,255,.85); padding: 8px 12px; border-radius: 999px; font-weight: 900; font-size: 12px; cursor:pointer; color: var(--text); box-shadow: var(--shadow2); }
-    body.dark .btn2{ background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); color: rgba(255,255,255,.92); }
-    .btn2.primary{ background: rgba(15,23,42,.92); color:white; border-color: rgba(15,23,42,.18); }
-    body.dark .btn2.primary{ background: rgba(255,255,255,.92); color: rgba(15,23,42,.95); border-color: rgba(231,237,247,.18); }
-    .btn2.danger{ background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); }
-    body.dark .btn2.danger{ background: rgba(239,68,68,.20); border-color: rgba(239,68,68,.45); }
-
-    .input, .textarea, .select{
-      width:100%;
+    .card{ padding: 14px; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; }
+    .field{ display:flex; flex-direction:column; gap:6px; }
+    .field label{ font-size: 12px; font-weight: 900; color: var(--muted); }
+    .input, textarea, select{
       border: 1px solid var(--border);
       background: rgba(255,255,255,.92);
       border-radius: 14px;
       padding: 10px 12px;
       color: var(--text);
       font-weight: 700;
-      outline:none;
+      outline: none;
       box-shadow: var(--shadow2);
     }
-    body.dark .input, body.dark .textarea, body.dark .select{ background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); }
-    .textarea{ min-height: 110px; resize: vertical; }
+    body.dark .input, body.dark textarea, body.dark select{ background: rgba(255,255,255,.08); }
+    textarea{ min-height: 110px; resize: vertical; }
 
-    .drop{ border: 1px dashed var(--border); border-radius: 16px; padding: 18px; text-align:center; cursor:pointer; background: rgba(15,23,42,.03); }
-    body.dark .drop{ background: rgba(255,255,255,.04); }
-    .drop.drag{ border-color: rgba(15,23,42,.35); background: rgba(15,23,42,.06); }
-    body.dark .drop.drag{ border-color: rgba(255,255,255,.25); background: rgba(255,255,255,.06); }
-    .drop small{ display:block; margin-top: 6px; color: var(--muted); }
+    .btn, .btn2{
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.92);
+      border-radius: 999px;
+      padding: 9px 12px;
+      font-weight: 950;
+      cursor:pointer;
+      box-shadow: var(--shadow2);
+      color: var(--text);
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+    }
+    body.dark .btn, body.dark .btn2{ background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); }
+    .btn.primary{ background: rgba(15,23,42,.92); color: white; border-color: rgba(15,23,42,.18); }
+    body.dark .btn.primary{ background: rgba(255,255,255,.92); color: rgba(15,23,42,.95); }
+    .btn.danger{ background: rgba(239,68,68,.14); border-color: rgba(239,68,68,.35); }
+    body.dark .btn.danger{ background: rgba(239,68,68,.18); }
 
-    .pill{ display:inline-flex; align-items:center; padding: 7px 10px; border-radius: 999px; border: 1px solid var(--border); background: rgba(15,23,42,.04); font-weight: 900; font-size: 12px; cursor:pointer; user-select:none; }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding: 8px 10px; border-radius: 999px; border: 1px solid var(--border); background: rgba(15,23,42,.04); font-weight: 900; font-size: 12px; }
     body.dark .pill{ background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); }
-    .pill.on{ background: rgba(15,23,42,.92); color:white; border-color: rgba(15,23,42,.18); }
-    body.dark .pill.on{ background: rgba(255,255,255,.92); color: rgba(15,23,42,.95); border-color: rgba(231,237,247,.18); }
 
-    .posts{ display:flex; flex-direction:column; gap: 10px; }
-    .post-item{ display:flex; gap: 10px; align-items:center; padding: 10px; border-radius: 16px; border: 1px solid var(--border); background: rgba(255,255,255,.72); cursor: pointer; }
-    body.dark .post-item{ background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); }
-    .thumb{ width: 64px; height: 48px; border-radius: 12px; object-fit: cover; background: rgba(15,23,42,.05); border: 1px solid var(--border); }
-    body.dark .thumb{ background: rgba(255,255,255,.06); }
-    .post-meta{ flex:1; min-width: 0; }
-    .post-meta b{ display:block; font-size: 13px; }
-    .post-meta span{ display:block; font-size: 12px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
-    .drag-hint{ font-size: 12px; color: var(--muted); }
+    #drop{
+      border: 1px dashed rgba(100,116,139,.55);
+      border-radius: 16px;
+      padding: 14px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      background: rgba(255,255,255,.55);
+      cursor:pointer;
+    }
+    body.dark #drop{ background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.18); }
+    #drop.drag{ border-color: rgba(59,130,246,.6); box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
 
-    /* Analytics */
-    .stats{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
-    @media (max-width: 560px){ .stats{ grid-template-columns: 1fr; } }
-    .stat{ border: 1px solid var(--border); border-radius: 16px; padding: 10px 12px; background: rgba(15,23,42,.03); }
+    .post-row{
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255,255,255,.72);
+      padding: 12px;
+      display:flex;
+      justify-content:space-between;
+      gap: 10px;
+      align-items:flex-start;
+      box-shadow: var(--shadow2);
+      margin-top: 10px;
+    }
+    body.dark .post-row{ background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); }
+
+    .mini{ font-size: 12px; color: var(--muted); font-weight: 800; }
+    .h3{ margin:0 0 10px; font-size: 16px; font-weight: 950; }
+    .stat-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    @media (max-width: 560px){ .stat-grid{ grid-template-columns: 1fr; } }
+    .stat{
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255,255,255,.72);
+      padding: 12px;
+      box-shadow: var(--shadow2);
+    }
     body.dark .stat{ background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); }
-    .stat .k{ color: var(--muted); font-weight: 900; font-size: 12px; }
-    .stat .v{ font-weight: 950; font-size: 20px; margin-top: 6px; }
+    .stat .k{ font-size: 12px; color: var(--muted); font-weight: 950; }
+    .stat .v{ margin-top: 6px; font-size: 22px; font-weight: 950; letter-spacing:.2px; }
+    .stat .s{ margin-top: 6px; font-size: 12px; color: var(--muted); font-weight: 800; }
 
     /* Gate */
-    .center-title{ font-size: 20px; font-weight: 950; margin:0; }
-    .center-sub{ color: var(--muted); margin-top: 6px; }
+    #gate{
+      position: fixed;
+      inset: 0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      background: rgba(15,23,42,.25);
+      backdrop-filter: blur(10px);
+      z-index: 200;
+    }
+    #gate.hidden{ display:none; }
+    .gate-card{
+      width: min(520px, 92vw);
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.92);
+      border-radius: 22px;
+      box-shadow: 0 30px 80px rgba(15,23,42,.25);
+      padding: 16px;
+    }
+    body.dark .gate-card{ background: rgba(2,6,23,.92); box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+    .gate-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top: 10px; }
+
+    .toast{
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%) translateY(8px);
+      background: rgba(15,23,42,.92);
+      color: white;
+      border: 1px solid rgba(255,255,255,.14);
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-weight: 900;
+      font-size: 12px;
+      box-shadow: var(--shadow2);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+      z-index: 250;
+      white-space: nowrap;
+    }
+    .toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
+    body.dark .toast{ background: rgba(255,255,255,.92); color: rgba(15,23,42,.92); }
   </style>
 </head>
+
 <body>
+  <!-- Login gate -->
+  <div id="gate">
+    <div class="gate-card">
+      <h2 style="margin:0; font-size:18px; font-weight:950;">Admin login</h2>
+      <p class="mini" style="margin:8px 0 0;">Enter the password to manage posts.</p>
 
-  <!-- If no ?mbcms in the URL -->
-  <div id="gate" class="card center-box" style="display:none;">
-    <div class="card-pad">
-      <p class="center-title">Not found</p>
-      <p class="center-sub">This page is hidden.</p>
-    </div>
-  </div>
-
-  <!-- Login -->
-  <div id="login" class="card center-box" style="display:none;">
-    <div class="card-pad">
-      <p class="center-title">Admin login</p>
-      <p class="center-sub">Enter the admin password.</p>
-      <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-        <input class="input" id="pw" type="password" placeholder="••••••••" style="flex:1; min-width: 220px;" />
-        <button class="btn2 primary" id="loginBtn" type="button">Login</button>
+      <div class="field" style="margin-top:12px;">
+        <label for="pw">Password</label>
+        <input class="input" id="pw" type="password" placeholder="••••••••" autocomplete="current-password" />
       </div>
-      <p class="center-sub" id="loginHint" style="margin-top:10px;"></p>
+
+      <div class="gate-actions">
+        <button class="btn primary" id="loginBtn" type="button">Log in</button>
+        <button class="btn" id="toggleThemeBtn" type="button">Dark</button>
+      </div>
+
+      <p class="mini" style="margin:10px 0 0;">Tip: You can still open this page using <b>Ctrl + Shift + A</b> from your portfolio.</p>
     </div>
   </div>
 
-  <!-- App -->
-  <main id="app" class="cms-wrap" style="display:none;">
+  <main class="admin-wrap" id="app" style="display:none;">
     <div class="container">
-      <div class="cms-top">
+      <div class="admin-top">
         <div>
-          <h1 class="cms-title">MB CMS</h1>
-          <div class="cms-sub">Local-only editor (saved in your browser).</div>
+          <h1 class="admin-title">MB CMS</h1>
+          <p class="admin-sub">Create, edit, schedule, draft, and feature posts. LocalStorage-based.</p>
         </div>
+
         <div class="row">
-          <button class="btn2" id="themeToggle" type="button">Dark</button>
-          <button class="btn2" id="logoutBtn" type="button">Logout</button>
+          <button class="btn" id="themeToggle" type="button">Dark</button>
+          <button class="btn" id="logoutBtn" type="button">Log out</button>
         </div>
       </div>
 
-      <div style="height:14px"></div>
-
-      <div class="grid">
-        <!-- Editor -->
+      <div class="grid2">
+        <!-- Create / Edit -->
         <section class="card">
-          <div class="card-pad">
-            <div class="row" style="justify-content:space-between;">
-              <h2 id="editorTitle" class="cms-title" style="font-size:16px;">Create post</h2>
-              <span class="drag-hint" id="editId"></span>
+          <h3 class="h3" id="formTitle">Create post</h3>
+
+          <div class="field">
+            <label>Image</label>
+            <div id="drop">
+              <div style="font-weight:950;">Drop image here</div>
+              <div class="mini">or click to upload • auto-compress enabled</div>
+              <input id="file" type="file" accept="image/*" style="display:none;" />
+            </div>
+            <img id="preview" alt="Preview" style="width:100%; max-height: 320px; object-fit:contain; margin-top:10px; border-radius: 16px; display:none;" />
+          </div>
+
+          <div class="row" style="margin-top:10px;">
+            <div class="field" style="flex:1; min-width: 220px;">
+              <label for="title">Title</label>
+              <input class="input" id="title" type="text" placeholder="Title…" />
             </div>
 
-            <div style="height:10px"></div>
-
-            <div id="drop" class="drop" tabindex="0">
-              <b>Drop image</b> or click to upload
-              <small>JPG/PNG/WebP recommended</small>
-            </div>
-            <input id="file" type="file" accept="image/*" hidden />
-
-            <div style="height:12px"></div>
-
-            <div class="row">
-              <input class="input" id="title" type="text" placeholder="Optional title" />
-            </div>
-
-            <div style="height:10px"></div>
-
-            <div class="row">
-              <select class="select" id="category">
+            <div class="field" style="min-width: 180px;">
+              <label for="category">Category</label>
+              <select class="input" id="category">
                 <option value="Photography">Photography</option>
                 <option value="Art">Art / Drawings</option>
               </select>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:10px;">
+            <label for="caption">Caption</label>
+            <textarea id="caption" placeholder="Write a caption…"></textarea>
+          </div>
+
+          <div class="row" style="margin-top:10px;">
+            <div class="field" style="flex:1; min-width: 220px;">
+              <label for="tags">Tags</label>
+              <input class="input" id="tags" type="text" placeholder="#sunset #cats …" />
+              <div class="mini">Use spaces. “#” is optional (we auto-add).</div>
+            </div>
+
+            <div class="field" style="min-width: 220px;">
+              <label for="schedule">Schedule (optional)</label>
               <input class="input" id="schedule" type="datetime-local" />
+              <div class="mini">If in the future, it won’t appear publicly yet.</div>
             </div>
+          </div>
 
-            <div style="height:10px"></div>
+          <div class="row" style="margin-top:10px;">
+            <label class="pill"><input id="featured" type="checkbox" /> Featured</label>
+            <label class="pill"><input id="draft" type="checkbox" /> Draft</label>
+          </div>
 
-            <textarea class="textarea" id="caption" placeholder="Write a caption..."></textarea>
-
-            <div style="height:10px"></div>
-
-            <input class="input" id="tags" type="text" placeholder="#sunset #street #study" />
-
-            <div style="height:10px"></div>
-
-            <div class="row">
-              <span class="pill" id="pillFeatured">Featured</span>
-              <span class="pill" id="pillDraft">Draft</span>
-            </div>
-
-            <div style="height:12px"></div>
-
-            <div class="row">
-              <button class="btn2 primary" id="saveBtn" type="button">Publish</button>
-              <button class="btn2" id="resetBtn" type="button">Reset</button>
-              <button class="btn2 danger" id="deleteBtn" type="button" style="display:none;">Delete</button>
-            </div>
-
-            <div class="cms-sub" id="status" style="margin-top:10px;"></div>
+          <div class="row" style="margin-top:12px;">
+            <button class="btn primary" id="saveBtn" type="button">Save</button>
+            <button class="btn" id="cancelBtn" type="button" style="display:none;">Cancel edit</button>
           </div>
         </section>
 
-        <!-- Right column -->
-        <aside style="display:flex; flex-direction:column; gap: 14px;">
-          <!-- Analytics card (separate, per your request) -->
-          <section class="card" id="analyticsCard">
-            <div class="card-pad">
-              <h2 class="cms-title" style="font-size:16px; margin-bottom:6px;">Analytics</h2>
-              <div class="cms-sub">Counts are based on what’s in your browser (localStorage).</div>
-              <div class="stats">
-                <div class="stat"><div class="k">Total posts</div><div class="v" id="countTotal">0</div></div>
-                <div class="stat"><div class="k">Photography</div><div class="v" id="countPhoto">0</div></div>
-                <div class="stat"><div class="k">Art / Drawings</div><div class="v" id="countArt">0</div></div>
-                <div class="stat"><div class="k">Featured</div><div class="v" id="countFeatured">0</div></div>
-                <div class="stat"><div class="k">Drafts</div><div class="v" id="countDraft">0</div></div>
-                <div class="stat"><div class="k">Scheduled</div><div class="v" id="countScheduled">0</div></div>
-              </div>
-            </div>
-          </section>
+        <!-- Analytics -->
+        <section class="card" id="analyticsCard">
+          <h3 class="h3">Analytics</h3>
 
-          <!-- Posts list + backup -->
-          <section class="card">
-            <div class="card-pad">
-              <div class="row" style="justify-content:space-between;">
-                <h2 class="cms-title" style="font-size:16px;">Posts</h2>
-                <span class="drag-hint">Tip: drag to reorder</span>
-              </div>
-              <div style="height:10px"></div>
-              <div class="row">
-                <button class="btn2" id="exportBtn" type="button">Export</button>
-                <button class="btn2 danger" id="wipeBtn" type="button">Wipe all</button>
-              </div>
-              <div style="height:12px"></div>
-              <div id="posts" class="posts"></div>
+          <div class="stat-grid">
+            <div class="stat">
+              <div class="k">Total posts</div>
+              <div class="v" id="statTotal">0</div>
+              <div class="s" id="statTotalSub">All saved posts (draft + scheduled included)</div>
             </div>
-          </section>
-        </aside>
+
+            <div class="stat">
+              <div class="k">Photography</div>
+              <div class="v" id="statPhoto">0</div>
+              <div class="s">Count in Photography category</div>
+            </div>
+
+            <div class="stat">
+              <div class="k">Art / Drawings</div>
+              <div class="v" id="statArt">0</div>
+              <div class="s">Count in Art category</div>
+            </div>
+
+            <div class="stat">
+              <div class="k">Featured</div>
+              <div class="v" id="statFeatured">0</div>
+              <div class="s">Pinned on homepage</div>
+            </div>
+
+            <div class="stat">
+              <div class="k">Drafts</div>
+              <div class="v" id="statDrafts">0</div>
+              <div class="s">Hidden from public</div>
+            </div>
+
+            <div class="stat">
+              <div class="k">Total views</div>
+              <div class="v" id="statViews">0</div>
+              <div class="s">Sum of per-post views (localStorage)</div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;">
+            <div class="mini" style="font-weight:950; margin-bottom:8px;">Top viewed</div>
+            <div id="topViews"></div>
+          </div>
+        </section>
       </div>
+
+      <!-- Drafts -->
+      <section class="card" id="draftsCard" style="margin-top:14px;">
+        <h3 class="h3">Draft posts</h3>
+        <p class="mini" style="margin:0 0 10px;">Separate list so you can quickly find unfinished posts.</p>
+        <div id="drafts"></div>
+      </section>
+
+      <!-- Posts -->
+      <section class="card" style="margin-top:14px;">
+        <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div>
+            <h3 class="h3" style="margin-bottom:4px;">Posts</h3>
+            <div class="mini">Tip: drag posts to reorder.</div>
+          </div>
+
+          <div class="row">
+            <button class="btn2" id="refreshBtn" type="button">Refresh</button>
+            <button class="btn2 danger" id="wipeBtn" type="button">Wipe all</button>
+          </div>
+        </div>
+
+        <div id="posts"></div>
+      </section>
+
+      <!-- Backup / Restore -->
+      <section class="card" style="margin-top:14px;">
+        <h3 class="h3">Backup / Restore</h3>
+
+        <div class="row">
+          <button class="btn" id="exportJson" type="button">Export JSON</button>
+
+          <label class="btn" style="cursor:pointer;">
+            Import JSON
+            <input id="importJson" type="file" accept="application/json" style="display:none;" />
+          </label>
+
+          <button class="btn danger" id="clearAllPosts" type="button">Clear all</button>
+        </div>
+
+        <p class="mini" style="margin:10px 0 0;">
+          Export downloads your posts (tags/captions/schedules included). Import replaces current data.
+        </p>
+      </section>
     </div>
   </main>
+
+  <div class="toast" id="toast">Saved</div>
 
   <script src="admin.js"></script>
 </body>
